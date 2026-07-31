@@ -41,9 +41,7 @@ type WordRow = {
   id: string;
   word: string;
   hint?: string | null;
-  hint_easy?: string | null;
-  hint_medium?: string | null;
-  hint_hard?: string | null;
+  hint_hard?: string | null; // legacy source; kept only as a pre-migration fallback
 };
 
 type Vote = { id: string; voter_id: string; target_id: string };
@@ -560,7 +558,7 @@ function WaitingScreen({ title, subtitle, onLeave }: { title: string; subtitle: 
 // otherwise fall back to the legacy difficulty columns.
 function getHint(wordRow: WordRow | null) {
   if (!wordRow) return "No hint available";
-  return wordRow.hint || wordRow.hint_medium || wordRow.hint_easy || wordRow.hint_hard || "No hint available";
+  return wordRow.hint || wordRow.hint_hard || "No hint available";
 }
 
 function RevealCard({
