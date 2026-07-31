@@ -30,8 +30,8 @@ type Room = {
   reveal_mode: string;
   timer_enabled: boolean;
   timer_seconds: number;
-  hint_difficulty: string;
   hints_enabled: boolean;
+  show_category: boolean;
 };
 
 type Category = { id: string; name: string };
@@ -57,8 +57,8 @@ function RoomPage() {
   const [revealMode, setRevealMode] = useState<"own" | "pass">("own");
   const [timerEnabled, setTimerEnabled] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(120);
-  const [hintDifficulty, setHintDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [hintsEnabled, setHintsEnabled] = useState(true);
+  const [showCategory, setShowCategory] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [startError, setStartError] = useState("");
 
@@ -79,8 +79,8 @@ function RoomPage() {
       setRevealMode(data.reveal_mode);
       setTimerEnabled(data.timer_enabled);
       setTimerSeconds(data.timer_seconds);
-      setHintDifficulty(data.hint_difficulty || "medium");
       setHintsEnabled(data.hints_enabled ?? true);
+      setShowCategory(data.show_category ?? false);
       setSelectedCategory(data.category_id || "");
     }
   }, [code]);
@@ -101,8 +101,8 @@ function RoomPage() {
       setRevealMode(roomData.reveal_mode);
       setTimerEnabled(roomData.timer_enabled);
       setTimerSeconds(roomData.timer_seconds);
-      setHintDifficulty(roomData.hint_difficulty || "medium");
       setHintsEnabled(roomData.hints_enabled ?? true);
+      setShowCategory(roomData.show_category ?? false);
       setSelectedCategory(roomData.category_id || "");
 
       await fetchPlayers(roomData.id);
@@ -166,15 +166,18 @@ function RoomPage() {
       reveal_mode: revealMode,
       timer_enabled: timerEnabled,
       timer_seconds: timerSeconds,
-      hint_difficulty: hintDifficulty,
       category_id: selectedCategory || null,
       word: randomWord,
     };
-    const { error } = await supabase.from("rooms")
-      .update({ ...base, hints_enabled: hintsEnabled }).eq("id", room.id);
-    // The hints_enabled column may not exist yet (needs a migration). Fall back
-    // to saving the rest so the other settings still persist.
-    if (error) await supabase.from("rooms").update(base).eq("id", room.id);
+    // Try to persist everything, then progressively fall back so a not-yet-added
+    // column (show_category needs a migration) never blocks the other settings.
+    const full = { ...base, hints_enabled: hintsEnabled, show_category: showCategory };
+    const { error } = await supabase.from("rooms").update(full).eq("id", room.id);
+    if (error) {
+      const { error: e2 } = await supabase.from("rooms")
+        .update({ ...base, hints_enabled: hintsEnabled }).eq("id", room.id);
+      if (e2) await supabase.from("rooms").update(base).eq("id", room.id);
+    }
     setSavingSettings(false);
     setShowSettings(false);
   }
@@ -374,9 +377,11 @@ function RoomPage() {
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span>Imposter hint</span>
-              <span style={{ color: "var(--t1)", textTransform: "capitalize" }}>
-                {room.hints_enabled === false ? "Off" : room.hint_difficulty}
-              </span>
+              <span style={{ color: "var(--t1)" }}>{room.hints_enabled === false ? "Off" : "On"}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>Show category</span>
+              <span style={{ color: "var(--t1)" }}>{room.show_category ? "On" : "Off"}</span>
             </div>
           </div>
         )}
@@ -444,26 +449,29 @@ function RoomPage() {
             )}
 
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                <div className="label" style={{ margin: 0 }}>Imposter hint</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div className="label" style={{ margin: 0 }}>Show hint to imposter</div>
+                  <div style={{ fontSize: "11px", color: "var(--t3)", marginTop: "2px" }}>Give the imposter the word&apos;s hint</div>
+                </div>
                 <button onClick={() => setHintsEnabled(!hintsEnabled)}
-                  style={{ padding: "4px 12px", borderRadius: "20px", border: `0.5px solid ${hintsEnabled ? "var(--accent)" : "var(--border2)"}`, background: hintsEnabled ? "var(--accent)" : "var(--bg3)", color: hintsEnabled ? "#fff" : "var(--t2)", cursor: "pointer", fontSize: "12px" }}>
+                  style={{ padding: "4px 14px", borderRadius: "20px", border: `1px solid ${hintsEnabled ? "var(--accent)" : "var(--border2)"}`, background: hintsEnabled ? "var(--accent)" : "var(--bg3)", color: hintsEnabled ? "#fff" : "var(--t2)", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>
                   {hintsEnabled ? "On" : "Off"}
                 </button>
               </div>
-              {hintsEnabled && (
-                <>
-                  <div className="label">Hint difficulty</div>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    {(["easy", "medium", "hard"] as const).map(d => (
-                      <button key={d} onClick={() => setHintDifficulty(d)}
-                        style={{ flex: 1, padding: "10px", borderRadius: "8px", border: `0.5px solid ${hintDifficulty === d ? "var(--accent)" : "var(--border2)"}`, background: hintDifficulty === d ? "var(--accent)" : "var(--bg3)", color: hintDifficulty === d ? "#fff" : "var(--t2)", cursor: "pointer", fontSize: "13px", textTransform: "capitalize" }}>
-                        {d}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
+            </div>
+
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div className="label" style={{ margin: 0 }}>Show category to imposter</div>
+                  <div style={{ fontSize: "11px", color: "var(--t3)", marginTop: "2px" }}>Reveal the category name (e.g. Telugu Movies)</div>
+                </div>
+                <button onClick={() => setShowCategory(!showCategory)}
+                  style={{ padding: "4px 14px", borderRadius: "20px", border: `1px solid ${showCategory ? "var(--accent)" : "var(--border2)"}`, background: showCategory ? "var(--accent)" : "var(--bg3)", color: showCategory ? "#fff" : "var(--t2)", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>
+                  {showCategory ? "On" : "Off"}
+                </button>
+              </div>
             </div>
 
             <div>

@@ -31,16 +31,17 @@ type Room = {
   reveal_mode: "own" | "pass";
   timer_enabled: boolean;
   timer_seconds: number;
-  hint_difficulty: "easy" | "medium" | "hard";
   hints_enabled: boolean;
+  show_category: boolean;
 };
 
 type WordRow = {
   id: string;
   word: string;
-  hint_easy: string;
-  hint_medium: string;
-  hint_hard: string;
+  hint?: string | null;
+  hint_easy?: string | null;
+  hint_medium?: string | null;
+  hint_hard?: string | null;
 };
 
 type Vote = { id: string; voter_id: string; target_id: string };
@@ -78,6 +79,7 @@ function GamePage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [votes, setVotes] = useState<Vote[]>([]);
   const [wordRow, setWordRow] = useState<WordRow | null>(null);
+  const [categoryName, setCategoryName] = useState<string | null>(null);
   const [myId, setMyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -147,16 +149,25 @@ function GamePage() {
     return () => { supabase.removeChannel(channel); };
   }, [room, fetchPlayers, fetchVotes, fetchRoom, code, router]);
 
-  // hints default to ON when the column is null/absent (pre-migration).
+  // hints default to ON, category default OFF when the column is null/absent.
   const hintsEnabled = room?.hints_enabled ?? true;
+  const showCategory = room?.show_category ?? false;
 
-  // Look up hint text for the current word (only needed when hints are on)
+  // Look up the hint text for the current word (only needed when hints are on).
   useEffect(() => {
     if (!hintsEnabled || !room?.word || !room.category_id) { setWordRow(null); return; }
     supabase
       .from("words").select().eq("category_id", room.category_id).eq("word", room.word).single()
       .then(({ data }) => setWordRow(data || null));
   }, [hintsEnabled, room?.word, room?.category_id]);
+
+  // Look up the category name (shown to the imposter when the host enables it).
+  useEffect(() => {
+    if (!showCategory || !room?.category_id) { setCategoryName(null); return; }
+    supabase
+      .from("categories").select("name").eq("id", room.category_id).single()
+      .then(({ data }) => setCategoryName(data?.name ?? null));
+  }, [showCategory, room?.category_id]);
 
   // Reset per-round local UI state whenever the room phase changes
   useEffect(() => {
@@ -278,7 +289,8 @@ function GamePage() {
         <PassRevealScreen
           player={currentPassPlayer}
           hintsEnabled={hintsEnabled}
-          hintDifficulty={room.hint_difficulty}
+          showCategory={showCategory}
+          categoryName={categoryName}
           word={room.word}
           wordRow={wordRow}
           revealed={revealed}
@@ -298,7 +310,8 @@ function GamePage() {
       <OwnRevealScreen
         me={me}
         hintsEnabled={hintsEnabled}
-        hintDifficulty={room.hint_difficulty}
+        showCategory={showCategory}
+        categoryName={categoryName}
         word={room.word}
         wordRow={wordRow}
         revealed={revealed}
@@ -535,21 +548,22 @@ function WaitingScreen({ title, subtitle, onLeave }: { title: string; subtitle: 
   );
 }
 
-function getHint(wordRow: WordRow | null, difficulty: "easy" | "medium" | "hard") {
+// A word has a single hint. Prefer a dedicated `hint` column if present,
+// otherwise fall back to the legacy difficulty columns.
+function getHint(wordRow: WordRow | null) {
   if (!wordRow) return "No hint available";
-  if (difficulty === "easy") return wordRow.hint_easy;
-  if (difficulty === "hard") return wordRow.hint_hard;
-  return wordRow.hint_medium;
+  return wordRow.hint || wordRow.hint_medium || wordRow.hint_easy || wordRow.hint_hard || "No hint available";
 }
 
 function RevealCard({
-  isImposter, hintsEnabled, word, wordRow, hintDifficulty, revealed, onReveal, onDone, prompt,
+  isImposter, hintsEnabled, showCategory, categoryName, word, wordRow, revealed, onReveal, onDone, prompt,
 }: {
   isImposter: boolean;
   hintsEnabled: boolean;
+  showCategory: boolean;
+  categoryName: string | null;
   word: string | null;
   wordRow: WordRow | null;
-  hintDifficulty: "easy" | "medium" | "hard";
   revealed: boolean;
   onReveal: () => void;
   onDone: () => void;
@@ -589,14 +603,20 @@ function RevealCard({
               <div className="card" style={{ background: "rgba(255,107,107,0.08)", border: "0.5px solid #5A1A1A", padding: "24px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
                 <div style={{ fontSize: "44px" }}>🎭</div>
                 <h2 style={{ fontSize: "18px", fontWeight: "700", color: "#FF6B6B" }}>You are the imposter</h2>
-                {hintsEnabled ? (
-                  <>
-                    <p style={{ fontSize: "11px", color: "#C99", textTransform: "uppercase", letterSpacing: "0.08em" }}>Hint</p>
-                    <p style={{ fontSize: "26px", fontWeight: "800", color: "#FF6B6B" }}>{getHint(wordRow, hintDifficulty)}</p>
-                  </>
-                ) : (
-                  <p style={{ fontSize: "14px", color: "#C99" }}>No hint — blend in and don&apos;t get caught.</p>
+                {showCategory && categoryName && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                    <p style={{ fontSize: "11px", color: "#C99", textTransform: "uppercase", letterSpacing: "0.08em" }}>Category</p>
+                    <p style={{ fontSize: "18px", fontWeight: "700", color: "#FFB3B3" }}>{categoryName}</p>
+                  </div>
                 )}
+                {hintsEnabled ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                    <p style={{ fontSize: "11px", color: "#C99", textTransform: "uppercase", letterSpacing: "0.08em" }}>Hint</p>
+                    <p style={{ fontSize: "26px", fontWeight: "800", color: "#FF6B6B" }}>{getHint(wordRow)}</p>
+                  </div>
+                ) : !showCategory ? (
+                  <p style={{ fontSize: "14px", color: "#C99" }}>No hint — blend in and don&apos;t get caught.</p>
+                ) : null}
               </div>
             ) : (
               <div className="card" style={{ padding: "28px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -613,11 +633,12 @@ function RevealCard({
 }
 
 function OwnRevealScreen({
-  me, hintsEnabled, hintDifficulty, word, wordRow, revealed, onReveal, onDone,
+  me, hintsEnabled, showCategory, categoryName, word, wordRow, revealed, onReveal, onDone,
 }: {
   me: Player;
   hintsEnabled: boolean;
-  hintDifficulty: "easy" | "medium" | "hard";
+  showCategory: boolean;
+  categoryName: string | null;
   word: string | null;
   wordRow: WordRow | null;
   revealed: boolean;
@@ -628,9 +649,10 @@ function OwnRevealScreen({
     <RevealCard
       isImposter={me.is_imposter}
       hintsEnabled={hintsEnabled}
+      showCategory={showCategory}
+      categoryName={categoryName}
       word={word}
       wordRow={wordRow}
-      hintDifficulty={hintDifficulty}
       revealed={revealed}
       onReveal={onReveal}
       onDone={onDone}
@@ -640,11 +662,12 @@ function OwnRevealScreen({
 }
 
 function PassRevealScreen({
-  player, hintsEnabled, hintDifficulty, word, wordRow, revealed, onReveal, onDone,
+  player, hintsEnabled, showCategory, categoryName, word, wordRow, revealed, onReveal, onDone,
 }: {
   player: Player;
   hintsEnabled: boolean;
-  hintDifficulty: "easy" | "medium" | "hard";
+  showCategory: boolean;
+  categoryName: string | null;
   word: string | null;
   wordRow: WordRow | null;
   revealed: boolean;
@@ -668,9 +691,10 @@ function PassRevealScreen({
     <RevealCard
       isImposter={player.is_imposter}
       hintsEnabled={hintsEnabled}
+      showCategory={showCategory}
+      categoryName={categoryName}
       word={word}
       wordRow={wordRow}
-      hintDifficulty={hintDifficulty}
       revealed={revealed}
       onReveal={onReveal}
       onDone={onDone}
