@@ -2,6 +2,8 @@
 
 Real-time multiplayer social-deduction party game (Telugu, "It's not him"). Everyone in a room gets a secret word except the imposter(s), who instead get host-chosen clues. Players discuss, vote, and try to catch the imposter.
 
+**Live:** https://prudhvish11.github.io/vidu_kadu/ · **Repo:** `prudhvish11/vidu_kadu` (deploys automatically on push to `main`).
+
 ## Tech stack
 - **Next.js 16** (App Router) · **React 19** · **TypeScript**
 - **Tailwind v4** (only `@import`; styling is CSS variables + inline styles in `app/globals.css`)
@@ -40,6 +42,8 @@ Home → Lobby → **Word reveal** (own-phone or pass-device; hold-to-reveal wit
 
 Crew sees the word. The imposter sees only the clues the host enabled (below). Result logic: the most-voted player is "caught"; ties favor the imposter.
 
+The word (and category, if random) is drawn in `startGame` — so `word`/`category_id` are left null in the lobby and resolved fresh at each start (Play Again re-randomizes).
+
 ## Host settings ("Hints — what the imposter sees")
 Four independent on/off toggles, each controlling one clue on the imposter's card:
 | Toggle | Column | Source |
@@ -48,7 +52,9 @@ Four independent on/off toggles, each controlling one clue on the imposter's car
 | Category | `rooms.show_category` | `categories.name` |
 | Word length | `rooms.show_word_length` | derived from `word` |
 | First letter | `rooms.show_first_letter` | derived from `word` |
-Plus: category + word picker, imposter count (1–3), reveal mode (own/pass), discussion timer.
+The category clue name comes from the chosen word's own category (`words.category_id` → `categories.name`), so it works even when the room category is random.
+
+Plus: **category picker — defaults to "🎲 Random category"** (host can pick a specific one), optional specific-word picker, imposter count (1–3), reveal mode (own/pass), discussion timer. Random category = `rooms.category_id` stays null; `startGame` picks a random category + word.
 
 ## Players leaving / disconnects
 - **Leave button** deletes the player row + their votes (lobby and game).
@@ -66,10 +72,12 @@ Mango Fizz light palette, drifting **aurora** backdrop, **Apple Liquid Glass** c
 
 All data access is client-side Supabase (no API routes). Realtime is enabled for `rooms`, `players`, `votes`.
 
-## Deploy (GitHub Pages)
-1. Repo secrets (Settings → Secrets and variables → Actions): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+## Deploy (GitHub Pages) — LIVE
+Already set up and deployed to https://prudhvish11.github.io/vidu_kadu/. Every push to `main` runs `.github/workflows/deploy.yml`, which builds the static export and publishes `out/`. The workflow **auto-enables Pages** (`configure-pages` `enablement: true`) and auto-derives `basePath` (project site → `/<repo>`, user/custom-domain → empty). `.nojekyll` is added so `_next/` assets aren't stripped.
+
+Already-configured on the repo (only needed again for a fresh fork):
+1. Actions secrets `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (the anon key is public by design).
 2. Settings → Pages → Source: **GitHub Actions**.
-3. Push to `main` → `.github/workflows/deploy.yml` builds and publishes `out/`. `basePath` is auto-derived (project site → `/<repo>`, user/custom-domain → empty).
 
 ## Gotchas (these bit us — don't repeat)
 - **supabase-js query builders are lazy** — a `supabase.from().update().eq()` only runs when `await`ed / `.then()`-ed. Never fire-and-forget in effects.
@@ -79,4 +87,6 @@ All data access is client-side Supabase (no API routes). Realtime is enabled for
 - **Testing multiplayer locally**: two tabs in one browser share `localStorage` (`vk_player_id`) → same player. Use two browsers/incognito, or seed players via the Supabase REST API.
 
 ## Status
-Home, lobby, full game flow, hint toggles, player-leave/host-handoff/presence, UI redesign, and static export are all built and verified end-to-end. Deploy runs from `main` once the repo secrets + Pages source are set.
+Complete and **live**. Home, lobby, full game flow, the four imposter-clue toggles, random/specific category selection, player-leave / host-handoff / presence, the Mango-Fizz + Liquid Glass redesign, sound + haptics, and static export are all built and verified end-to-end. Deployed at https://prudhvish11.github.io/vidu_kadu/ and auto-redeploys on every push to `main`.
+
+The legacy `rooms.hint_difficulty` / `rooms.imposter_hint` and `words.hint_easy/medium/hard` columns have been dropped — the schema above is current.
