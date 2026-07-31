@@ -4,6 +4,9 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useRoomPresence, removePlayerFromRoom } from "@/lib/presence";
 import { avatarColor } from "@/lib/avatar";
+import { sfx } from "@/lib/sound";
+import SoundToggle from "@/components/SoundToggle";
+import Confetti from "@/components/Confetti";
 
 type Player = {
   id: string;
@@ -167,6 +170,15 @@ function GamePage() {
     if (room?.status !== "voting") votingAdvancedRef.current = false;
   }, [room?.status]);
 
+  // Win/lose sting when the result is shown.
+  useEffect(() => {
+    if (room?.status === "reveal" && revealStep === "result") {
+      if (computeResult(players, votes).crewWins) sfx.win();
+      else sfx.lose();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealStep, room?.status]);
+
   // Track live connections; auto-removes players who disconnect mid-game.
   useRoomPresence(room?.id ?? null, myId, players);
 
@@ -224,6 +236,7 @@ function GamePage() {
   async function castVote() {
     if (!room || !myId || !selectedTarget) return;
     setVotingBusy(true);
+    sfx.vote();
     await supabase.from("votes").insert({ room_id: room.id, voter_id: myId, target_id: selectedTarget });
     setVotingBusy(false);
   }
@@ -302,7 +315,8 @@ function GamePage() {
     return (
       <div className="page">
         <LeaveButton onLeave={leaveRoom} />
-        <div className="screen vk-fade-up" style={{ textAlign: "center", gap: "16px" }}>
+        <SoundToggle />
+        <div className="screen vk-phase" style={{ textAlign: "center", gap: "16px" }}>
           <div className="vk-float" style={{ fontSize: "44px" }}>🗣️</div>
           <h2 style={{ fontSize: "22px", fontWeight: "700", color: "var(--t1)" }}>Discussion time</h2>
           <p style={{ fontSize: "13px", color: "var(--t2)" }}>Talk it out — who doesn&apos;t know the word?</p>
@@ -313,7 +327,7 @@ function GamePage() {
             </div>
           )}
           {isHost ? (
-            <button className="btn-primary" onClick={startVoting}>Start Voting →</button>
+            <button className="btn-primary" onClick={() => { sfx.tap(); startVoting(); }}>Start Voting →</button>
           ) : (
             <p style={{ fontSize: "12px", color: "var(--t3)" }}>Waiting for host to start voting...</p>
           )}
@@ -337,9 +351,10 @@ function GamePage() {
     }
     const candidates = players.filter((p) => p.id !== myId && !p.is_eliminated);
     return (
-      <div className="page" style={{ justifyContent: "flex-start", paddingTop: "24px" }}>
+      <div className="page" style={{ justifyContent: "flex-start", paddingTop: "clamp(24px, 6vh, 48px)" }}>
         <LeaveButton onLeave={leaveRoom} />
-        <div className="screen vk-fade-up">
+        <SoundToggle />
+        <div className="screen vk-phase">
           <div style={{ textAlign: "center", marginBottom: "4px" }}>
             <div style={{ fontSize: "36px" }}>🗳️</div>
             <h2 style={{ fontSize: "20px", fontWeight: "700", color: "var(--t1)" }}>Who&apos;s the imposter?</h2>
@@ -348,10 +363,10 @@ function GamePage() {
             {candidates.map((p) => {
               const sel = selectedTarget === p.id;
               return (
-              <button key={p.id} onClick={() => setSelectedTarget(p.id)}
-                style={{ display: "flex", alignItems: "center", gap: "10px", textAlign: "left", padding: "10px 12px", borderRadius: "10px", cursor: "pointer",
+              <button key={p.id} onClick={() => { sfx.tap(); setSelectedTarget(p.id); }}
+                style={{ display: "flex", alignItems: "center", gap: "10px", textAlign: "left", padding: "10px 12px", borderRadius: "12px", cursor: "pointer",
                   border: `1px solid ${sel ? "var(--accent)" : "var(--border2)"}`,
-                  background: sel ? "rgba(108,92,231,0.18)" : "var(--bg3)",
+                  background: sel ? "rgba(255,122,0,0.16)" : "rgba(255,255,255,0.5)",
                   color: "var(--t1)", fontSize: "14px", transition: "background 0.15s, border-color 0.15s, transform 0.1s" }}>
                 <span className="avatar" style={{ width: "28px", height: "28px", fontSize: "12px", background: avatarColor(p.name) }}>
                   {p.name[0].toUpperCase()}
@@ -375,9 +390,10 @@ function GamePage() {
     if (revealStep === "votes") {
       const maxVotes = Math.max(1, ...players.map((p) => votes.filter((v) => v.target_id === p.id).length));
       return (
-        <div className="page" style={{ justifyContent: "flex-start", paddingTop: "24px" }}>
+        <div className="page" style={{ justifyContent: "flex-start", paddingTop: "clamp(24px, 6vh, 48px)" }}>
           <LeaveButton onLeave={leaveRoom} />
-          <div className="screen vk-fade-up">
+          <SoundToggle />
+          <div className="screen vk-phase">
             <h2 style={{ fontSize: "20px", fontWeight: "700", color: "var(--t1)", textAlign: "center" }}>Votes are in</h2>
             <div className="card" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {players.map((p) => {
@@ -398,7 +414,7 @@ function GamePage() {
                 );
               })}
             </div>
-            <button className="btn-outline" onClick={() => setShowWhoVoted((s) => !s)}>
+            <button className="btn-outline" onClick={() => { sfx.tap(); setShowWhoVoted((s) => !s); }}>
               {showWhoVoted ? "Hide" : "Show"} who voted for whom
             </button>
             {showWhoVoted && (
@@ -411,7 +427,7 @@ function GamePage() {
                 ))}
               </div>
             )}
-            <button className="btn-primary" onClick={() => setRevealStep("result")}>Reveal Imposter →</button>
+            <button className="btn-primary" onClick={() => { sfx.tap(); setRevealStep("result"); }}>Reveal Imposter →</button>
           </div>
         </div>
       );
@@ -421,7 +437,9 @@ function GamePage() {
       const { crewWins } = computeResult(players, votes);
       const imposters = players.filter((p) => p.is_imposter);
       return (
-        <div className="page" style={{ background: crewWins ? "radial-gradient(circle at 50% 30%, var(--bg2), var(--bg))" : "radial-gradient(circle at 50% 30%, #2A0F0F, #140707)" }}>
+        <div className="page" style={{ background: crewWins ? undefined : "radial-gradient(circle at 50% 30%, #2A0F0F, #140707)" }}>
+          {crewWins && <Confetti />}
+          <SoundToggle />
           <div className="screen" style={{ textAlign: "center", gap: "16px" }}>
             <div className="vk-pop" style={{ fontSize: "60px" }}>{crewWins ? "🎉" : "😈"}</div>
             <h2 className="vk-pop" style={{ fontSize: "28px", fontWeight: "800", color: crewWins ? "var(--accent-light)" : "var(--danger)", animationDelay: "0.08s" }}>
@@ -434,7 +452,7 @@ function GamePage() {
             {room.word && (
               <p className="vk-fade-up" style={{ fontSize: "13px", color: "var(--t3)", animationDelay: "0.28s" }}>The word was <strong style={{ color: "var(--t1)" }}>{room.word}</strong></p>
             )}
-            <button className="btn-primary" onClick={() => setRevealStep("scoreboard")}>See Scoreboard →</button>
+            <button className="btn-primary" onClick={() => { sfx.tap(); setRevealStep("scoreboard"); }}>See Scoreboard →</button>
           </div>
         </div>
       );
@@ -444,9 +462,10 @@ function GamePage() {
     const sorted = [...players].sort((a, b) => b.wins - a.wins);
     const medals = ["🥇", "🥈", "🥉"];
     return (
-      <div className="page" style={{ justifyContent: "flex-start", paddingTop: "24px" }}>
+      <div className="page" style={{ justifyContent: "flex-start", paddingTop: "clamp(24px, 6vh, 48px)" }}>
         <LeaveButton onLeave={leaveRoom} />
-        <div className="screen vk-fade-up">
+        <SoundToggle />
+        <div className="screen vk-phase">
           <h2 style={{ fontSize: "20px", fontWeight: "700", color: "var(--t1)", textAlign: "center" }}>🏆 Scoreboard</h2>
           <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0" }}>
             <div style={{ display: "flex", fontSize: "10px", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 0 8px", borderBottom: "0.5px solid var(--border)" }}>
@@ -467,7 +486,7 @@ function GamePage() {
             ))}
           </div>
           {isHost ? (
-            <button className="btn-primary" onClick={playAgain} disabled={playAgainBusy}>
+            <button className="btn-primary" onClick={() => { sfx.tap(); playAgain(); }} disabled={playAgainBusy}>
               {playAgainBusy ? "Starting..." : "Play Again"}
             </button>
           ) : (
@@ -492,7 +511,11 @@ export default function Page() {
 function LeaveButton({ onLeave }: { onLeave: () => void }) {
   return (
     <button onClick={onLeave}
-      style={{ position: "fixed", top: "16px", left: "16px", zIndex: 20, fontSize: "12px", color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
+      style={{ position: "fixed", top: "14px", left: "14px", zIndex: 30, fontSize: "12px", fontWeight: 600, color: "var(--accent-dark)", cursor: "pointer",
+        padding: "7px 13px", borderRadius: "999px",
+        background: "linear-gradient(160deg, rgba(255,255,255,0.7), rgba(255,255,255,0.35))",
+        backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+        border: "1px solid var(--glass-border)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9)" }}>
       ← Leave
     </button>
   );
@@ -532,17 +555,33 @@ function RevealCard({
   onDone: () => void;
   prompt: string;
 }) {
-  const bg = isImposter
-    ? "radial-gradient(circle at 50% 30%, #2A0F0F, #140707)"
-    : "radial-gradient(circle at 50% 30%, var(--bg2), var(--bg))";
+  const holdRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [holding, setHolding] = useState(false);
+  const bg = isImposter ? "radial-gradient(circle at 50% 25%, #2A0F0F, #140707)" : undefined;
   const accentColor = isImposter ? "#FF6B6B" : "var(--accent)";
+  const accentDark = isImposter ? "#C0392B" : "var(--accent-dark)";
+
+  function startHold() {
+    setHolding(true);
+    holdRef.current = setTimeout(() => { setHolding(false); sfx.reveal(); onReveal(); }, 750);
+  }
+  function cancelHold() {
+    setHolding(false);
+    if (holdRef.current) { clearTimeout(holdRef.current); holdRef.current = undefined; }
+  }
+
   return (
     <div className="page" style={{ background: bg }}>
+      <SoundToggle />
       <div className="screen" style={{ textAlign: "center", gap: "18px" }}>
-        <p style={{ fontSize: "13px", color: "var(--t2)" }}>{prompt}</p>
+        <p style={{ fontSize: "13px", color: isImposter ? "#f0b9b9" : "var(--t2)" }}>{prompt}</p>
         {!revealed ? (
-          <button className="btn-primary vk-pulse" style={{ background: `linear-gradient(135deg, ${accentColor}, ${isImposter ? "#C0392B" : "var(--accent-dark)"})`, boxShadow: `0 6px 18px -8px ${accentColor}` }} onClick={onReveal}>
-            👆 Tap to reveal
+          <button
+            onPointerDown={startHold} onPointerUp={cancelHold} onPointerLeave={cancelHold} onPointerCancel={cancelHold}
+            onContextMenu={(e) => e.preventDefault()}
+            style={{ position: "relative", overflow: "hidden", width: "100%", padding: "16px 24px", borderRadius: "16px", border: `1px solid ${isImposter ? "rgba(255,120,120,0.6)" : "rgba(255,150,60,0.7)"}`, background: `linear-gradient(160deg, ${accentColor}, ${accentDark})`, color: "#fff", fontSize: "15px", fontWeight: 700, cursor: "pointer", boxShadow: `0 9px 22px -7px ${accentColor}`, touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}>
+            <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: holding ? "100%" : "0%", background: "rgba(255,255,255,0.28)", transition: holding ? "width 0.75s linear" : "width 0.15s ease" }} />
+            <span style={{ position: "relative" }}>{holding ? "Keep holding…" : "👆 Hold to reveal"}</span>
           </button>
         ) : (
           <div className="vk-flip" style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
@@ -565,7 +604,7 @@ function RevealCard({
                 <h2 style={{ fontSize: "34px", fontWeight: "800", color: "var(--t1)", letterSpacing: "-0.01em" }}>{word}</h2>
               </div>
             )}
-            <button className="btn-outline" onClick={onDone}>Got it</button>
+            <button className="btn-outline" onClick={() => { sfx.tap(); onDone(); }}>Got it</button>
           </div>
         )}
       </div>
@@ -615,11 +654,12 @@ function PassRevealScreen({
   if (!revealed) {
     return (
       <div className="page">
-        <div className="screen" style={{ textAlign: "center", gap: "16px" }}>
-          <div style={{ fontSize: "40px" }}>📱</div>
-          <h2 style={{ fontSize: "20px", fontWeight: "600", color: "var(--t1)" }}>Pass the phone to</h2>
-          <p style={{ fontSize: "26px", fontWeight: "700", color: "var(--accent)" }}>{player.name}</p>
-          <button className="btn-primary" onClick={onReveal}>I&apos;m {player.name}, tap to reveal</button>
+        <SoundToggle />
+        <div className="screen vk-phase" style={{ textAlign: "center", gap: "16px" }}>
+          <div className="vk-float" style={{ fontSize: "44px" }}>📱</div>
+          <h2 style={{ fontSize: "20px", fontWeight: "700", color: "var(--t1)" }}>Pass the phone to</h2>
+          <p style={{ fontSize: "28px", fontWeight: "800", color: "var(--accent-dark)" }}>{player.name}</p>
+          <button className="btn-primary" onClick={() => { sfx.tap(); onReveal(); }}>I&apos;m {player.name}, tap to reveal</button>
         </div>
       </div>
     );

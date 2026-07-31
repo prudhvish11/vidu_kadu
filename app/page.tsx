@@ -2,6 +2,8 @@
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { sfx } from "@/lib/sound";
+import SoundToggle from "@/components/SoundToggle";
 import { generateId } from "@/lib/id";
 
 function generateCode() {
@@ -86,19 +88,20 @@ function Home() {
 
   return (
     <div className="page">
+      <SoundToggle />
       <div className="screen vk-fade-up">
         <div style={{ textAlign: "center", marginBottom: "8px" }}>
-          <div className="vk-float" style={{ fontSize: "52px", marginBottom: "8px" }}>🕵️</div>
-          <h1 style={{ fontSize: "34px", fontWeight: "800", letterSpacing: "-0.02em", background: "linear-gradient(135deg, var(--t1), var(--accent-light))", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
+          <div className="vk-float" style={{ fontSize: "clamp(52px, 14vw, 68px)", marginBottom: "8px" }}>🕵️</div>
+          <h1 style={{ fontSize: "clamp(34px, 9vw, 46px)", fontWeight: "800", letterSpacing: "-0.02em", background: "linear-gradient(120deg, var(--accent-dark), #E8368A)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
             Vidu Kadhu
           </h1>
-          <p style={{ fontSize: "13px", color: "var(--t3)", marginTop: "4px" }}>It&apos;s not him.</p>
+          <p style={{ fontSize: "13px", color: "var(--t2)", marginTop: "4px" }}>It&apos;s not him.</p>
         </div>
 
         {mode === "home" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "16px" }}>
-            <button className="btn-primary" onClick={() => setMode("create")}>Create Room</button>
-            <button className="btn-outline" onClick={() => setMode("join")}>Join Room</button>
+            <button className="btn-primary" onClick={() => { sfx.tap(); setMode("create"); }}>Create Room</button>
+            <button className="btn-outline" onClick={() => { sfx.tap(); setMode("join"); }}>Join Room</button>
           </div>
         )}
 

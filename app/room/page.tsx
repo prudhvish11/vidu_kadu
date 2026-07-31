@@ -4,6 +4,8 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useRoomPresence, removePlayerFromRoom } from "@/lib/presence";
 import { avatarColor } from "@/lib/avatar";
+import { sfx } from "@/lib/sound";
+import SoundToggle from "@/components/SoundToggle";
 
 type Player = {
   id: string;
@@ -263,40 +265,42 @@ function RoomPage() {
   const me = players.find(p => p.id === myId);
 
   return (
-    <div className="page" style={{ justifyContent: "flex-start", paddingTop: "24px" }}>
+    <div className="page" style={{ justifyContent: "flex-start", paddingTop: "clamp(24px, 6vh, 48px)" }}>
+      <SoundToggle />
       <div className="screen vk-fade-up">
 
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <h2 style={{ fontSize: "18px", fontWeight: "600", color: "var(--t1)" }}>
+            <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--t1)" }}>
               {isHost ? "Your Room" : "Joined Room"}
             </h2>
-            <p style={{ fontSize: "12px", color: "var(--t3)", marginTop: "2px" }}>
+            <p style={{ fontSize: "12px", color: "var(--t2)", marginTop: "2px" }}>
               {isHost ? "You are the host" : `Hosted by ${players.find(p => p.is_host)?.name || "..."}`}
             </p>
           </div>
           <button onClick={leaveRoom}
-            style={{ fontSize: "12px", color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
+            style={{ fontSize: "12px", color: "var(--t2)", background: "none", border: "none", cursor: "pointer" }}>
             Leave
           </button>
         </div>
 
-        {/* Room code */}
-        <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div className="label">Room code</div>
-            <div style={{ fontSize: "28px", fontWeight: "700", color: "var(--accent)", letterSpacing: "0.15em" }}>
+        {/* Room code — ticket style */}
+        <div className="card" style={{ display: "flex", alignItems: "stretch", gap: "14px", padding: "16px 18px" }}>
+          <div style={{ flex: 1 }}>
+            <div className="label">🎟 Room code</div>
+            <div style={{ fontSize: "clamp(30px, 9vw, 38px)", fontWeight: "800", color: "var(--accent-dark)", letterSpacing: "0.16em", lineHeight: 1 }}>
               {code}
             </div>
           </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={copyCode}
-              style={{ fontSize: "11px", padding: "6px 10px", borderRadius: "7px", background: "var(--bg3)", color: "var(--t2)", border: "0.5px solid var(--border2)", cursor: "pointer" }}>
+          <div style={{ width: "1px", background: "repeating-linear-gradient(to bottom, var(--border2) 0 5px, transparent 5px 10px)" }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", justifyContent: "center" }}>
+            <button onClick={() => { sfx.tap(); copyCode(); }}
+              style={{ fontSize: "11px", fontWeight: 600, padding: "7px 14px", borderRadius: "999px", background: "var(--bg3)", color: "var(--accent-dark)", border: "1px solid var(--border2)", cursor: "pointer" }}>
               Copy
             </button>
-            <button onClick={shareRoom}
-              style={{ fontSize: "11px", padding: "6px 10px", borderRadius: "7px", background: "var(--bg3)", color: "var(--t2)", border: "0.5px solid var(--border2)", cursor: "pointer" }}>
+            <button onClick={() => { sfx.tap(); shareRoom(); }}
+              style={{ fontSize: "11px", fontWeight: 600, padding: "7px 14px", borderRadius: "999px", background: "var(--bg3)", color: "var(--accent-dark)", border: "1px solid var(--border2)", cursor: "pointer" }}>
               Share ↗
             </button>
           </div>
@@ -384,10 +388,10 @@ function RoomPage() {
         {/* HOST ONLY controls */}
         {isHost && (
           <>
-            <button className="btn-outline" onClick={() => setShowSettings(true)}>
+            <button className="btn-outline" onClick={() => { sfx.tap(); setShowSettings(true); }}>
               ⚙️ Game Settings
             </button>
-            <button className="btn-primary" onClick={startGame}
+            <button className="btn-primary" onClick={() => { sfx.tap(); startGame(); }}
               disabled={players.length < 3}>
               Start Game →
             </button>
