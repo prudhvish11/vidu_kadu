@@ -40,6 +40,7 @@ type Room = {
 type WordRow = {
   id: string;
   word: string;
+  category_id?: string | null;
   hint?: string | null;
   hint_hard?: string | null; // legacy source; kept only as a pre-migration fallback
 };
@@ -155,21 +156,25 @@ function GamePage() {
   const showWordLength = room?.show_word_length ?? false;
   const showFirstLetter = room?.show_first_letter ?? false;
 
-  // Look up the hint text for the current word (only needed when hints are on).
+  // Look up the word row (for the hint text, and its category_id so the category
+  // clue works even when the room's category is random / null). Needed whenever
+  // the hint or the category clue is on.
   useEffect(() => {
-    if (!hintsEnabled || !room?.word || !room.category_id) { setWordRow(null); return; }
-    supabase
-      .from("words").select().eq("category_id", room.category_id).eq("word", room.word).single()
-      .then(({ data }) => setWordRow(data || null));
-  }, [hintsEnabled, room?.word, room?.category_id]);
+    if ((!hintsEnabled && !showCategory) || !room?.word) { setWordRow(null); return; }
+    let q = supabase.from("words").select().eq("word", room.word);
+    if (room.category_id) q = q.eq("category_id", room.category_id);
+    q.limit(1).maybeSingle().then(({ data }) => setWordRow(data || null));
+  }, [hintsEnabled, showCategory, room?.word, room?.category_id]);
 
-  // Look up the category name (shown to the imposter when the host enables it).
+  // Category name for the imposter clue — from the room, or fall back to the
+  // word's own category (used when the host chose "Random category").
+  const clueCategoryId = room?.category_id || wordRow?.category_id || null;
   useEffect(() => {
-    if (!showCategory || !room?.category_id) { setCategoryName(null); return; }
+    if (!showCategory || !clueCategoryId) { setCategoryName(null); return; }
     supabase
-      .from("categories").select("name").eq("id", room.category_id).single()
+      .from("categories").select("name").eq("id", clueCategoryId).single()
       .then(({ data }) => setCategoryName(data?.name ?? null));
-  }, [showCategory, room?.category_id]);
+  }, [showCategory, clueCategoryId]);
 
   // Reset per-round local UI state whenever the room phase changes
   useEffect(() => {

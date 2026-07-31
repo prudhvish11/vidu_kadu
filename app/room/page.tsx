@@ -167,15 +167,15 @@ function RoomPage() {
   async function saveSettings() {
     if (!room) return;
     setSavingSettings(true);
-    const randomWord = selectedWord ||
-      (words.length > 0 ? words[Math.floor(Math.random() * words.length)].word : null);
     const base = {
       imposter_count: imposterCount,
       reveal_mode: revealMode,
       timer_enabled: timerEnabled,
       timer_seconds: timerSeconds,
       category_id: selectedCategory || null,
-      word: randomWord,
+      // Only pin a specific word if the host picked one; otherwise leave it null
+      // so a fresh (random) word is drawn at each game start.
+      word: selectedWord || null,
     };
     // Try to persist everything, then progressively fall back so a not-yet-added
     // column (show_category needs a migration) never blocks the other settings.
@@ -201,10 +201,18 @@ function RoomPage() {
     setStartError("");
     if (players.length < 3) { setStartError("Need at least 3 players to start."); return; }
 
+    // Resolve the word: a specific one if the host chose it, otherwise a random
+    // word from the chosen category — or from a random category if none picked.
     let word = room.word;
     if (!word) {
-      if (!selectedCategory) { setStartError("Pick a category in settings first."); return; }
-      if (words.length > 0) word = words[Math.floor(Math.random() * words.length)].word;
+      let categoryId = selectedCategory;
+      if (!categoryId) {
+        if (categories.length === 0) { setStartError("No categories available yet."); return; }
+        categoryId = categories[Math.floor(Math.random() * categories.length)].id;
+      }
+      const { data: pool } = await supabase.from("words").select("word").eq("category_id", categoryId);
+      if (!pool || pool.length === 0) { setStartError("That category has no words. Pick another."); return; }
+      word = pool[Math.floor(Math.random() * pool.length)].word;
     }
 
     const shuffled = [...players].sort(() => Math.random() - 0.5);
@@ -375,7 +383,7 @@ function RoomPage() {
             <div style={{ fontSize: "11px", fontWeight: "500", color: "var(--t3)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Game settings</div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span>Category</span>
-              <span style={{ color: "var(--t1)" }}>{categories.find(c => c.id === room.category_id)?.name || "Not set"}</span>
+              <span style={{ color: "var(--t1)" }}>{categories.find(c => c.id === room.category_id)?.name || "🎲 Random"}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span>Imposters</span>
@@ -448,7 +456,7 @@ function RoomPage() {
               <select className="input" value={selectedCategory}
                 onChange={e => { setSelectedCategory(e.target.value); setSelectedWord(""); }}
                 style={{ appearance: "none" }}>
-                <option value="">Pick a category</option>
+                <option value="">🎲 Random category</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
