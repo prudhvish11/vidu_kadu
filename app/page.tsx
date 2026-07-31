@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { sfx } from "@/lib/sound";
 import SoundToggle from "@/components/SoundToggle";
+import Logo from "@/components/Logo";
 import { generateId } from "@/lib/id";
 
 function generateCode() {
@@ -91,7 +92,7 @@ function Home() {
       <SoundToggle />
       <div className="screen vk-fade-up">
         <div style={{ textAlign: "center", marginBottom: "8px" }}>
-          <div className="vk-float" style={{ fontSize: "clamp(52px, 14vw, 68px)", marginBottom: "8px" }}>🕵️</div>
+          <Logo className="vk-float" style={{ width: "clamp(88px, 24vw, 116px)", height: "auto", marginBottom: "10px" }} />
           <h1 style={{ fontSize: "clamp(34px, 9vw, 46px)", fontWeight: "800", letterSpacing: "-0.02em", background: "linear-gradient(120deg, var(--accent-dark), #E8368A)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
             Vidu Kadhu
           </h1>

@@ -192,6 +192,8 @@ body {
   0% { transform: translateY(0) translateX(0) rotate(0); opacity: 1; }
   100% { transform: translateY(115vh) translateX(var(--drift, 0)) rotate(720deg); opacity: 0.9; }
 }
+@keyframes vk-peek { 0%, 100% { transform: translateX(-1.4px); } 50% { transform: translateX(1.4px); } }
+.vk-peek-pupil { animation: vk-peek 2.6s ease-in-out infinite; }
 
 .vk-fade-up { animation: vk-fade-up 0.4s ease both; }
 .vk-pop { animation: vk-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
@@ -223,6 +225,6 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .vk-fade-up, .vk-pop, .vk-flip, .vk-float, .vk-pulse, .vk-phase,
+  .vk-fade-up, .vk-pop, .vk-flip, .vk-float, .vk-pulse, .vk-phase, .vk-peek-pupil,
   .page::before, .btn-primary::before { animation: none !important; transition: none !important; }
 }
