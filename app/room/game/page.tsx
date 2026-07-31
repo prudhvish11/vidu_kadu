@@ -33,6 +33,8 @@ type Room = {
   timer_seconds: number;
   hints_enabled: boolean;
   show_category: boolean;
+  show_word_length: boolean;
+  show_first_letter: boolean;
 };
 
 type WordRow = {
@@ -149,9 +151,11 @@ function GamePage() {
     return () => { supabase.removeChannel(channel); };
   }, [room, fetchPlayers, fetchVotes, fetchRoom, code, router]);
 
-  // hints default to ON, category default OFF when the column is null/absent.
+  // hints default to ON, the rest default OFF when the column is null/absent.
   const hintsEnabled = room?.hints_enabled ?? true;
   const showCategory = room?.show_category ?? false;
+  const showWordLength = room?.show_word_length ?? false;
+  const showFirstLetter = room?.show_first_letter ?? false;
 
   // Look up the hint text for the current word (only needed when hints are on).
   useEffect(() => {
@@ -291,6 +295,8 @@ function GamePage() {
           hintsEnabled={hintsEnabled}
           showCategory={showCategory}
           categoryName={categoryName}
+          showWordLength={showWordLength}
+          showFirstLetter={showFirstLetter}
           word={room.word}
           wordRow={wordRow}
           revealed={revealed}
@@ -312,6 +318,8 @@ function GamePage() {
         hintsEnabled={hintsEnabled}
         showCategory={showCategory}
         categoryName={categoryName}
+        showWordLength={showWordLength}
+        showFirstLetter={showFirstLetter}
         word={room.word}
         wordRow={wordRow}
         revealed={revealed}
@@ -556,12 +564,14 @@ function getHint(wordRow: WordRow | null) {
 }
 
 function RevealCard({
-  isImposter, hintsEnabled, showCategory, categoryName, word, wordRow, revealed, onReveal, onDone, prompt,
+  isImposter, hintsEnabled, showCategory, categoryName, showWordLength, showFirstLetter, word, wordRow, revealed, onReveal, onDone, prompt,
 }: {
   isImposter: boolean;
   hintsEnabled: boolean;
   showCategory: boolean;
   categoryName: string | null;
+  showWordLength: boolean;
+  showFirstLetter: boolean;
   word: string | null;
   wordRow: WordRow | null;
   revealed: boolean;
@@ -571,6 +581,10 @@ function RevealCard({
 }) {
   const holdRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [holding, setHolding] = useState(false);
+  const letters = word ? word.replace(/\s+/g, "").length : 0;
+  const firstLetter = word ? (word.trim()[0] || "").toUpperCase() : "";
+  const hasCategory = showCategory && !!categoryName;
+  const anyClue = hintsEnabled || hasCategory || (showWordLength && !!word) || (showFirstLetter && !!word);
   const bg = isImposter ? "radial-gradient(circle at 50% 25%, #2A0F0F, #140707)" : undefined;
   const accentColor = isImposter ? "#FF6B6B" : "var(--accent)";
   const accentDark = isImposter ? "#C0392B" : "var(--accent-dark)";
@@ -603,20 +617,36 @@ function RevealCard({
               <div className="card" style={{ background: "rgba(255,107,107,0.08)", border: "0.5px solid #5A1A1A", padding: "24px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
                 <div style={{ fontSize: "44px" }}>🎭</div>
                 <h2 style={{ fontSize: "18px", fontWeight: "700", color: "#FF6B6B" }}>You are the imposter</h2>
-                {showCategory && categoryName && (
+                {hasCategory && (
                   <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                     <p style={{ fontSize: "11px", color: "#C99", textTransform: "uppercase", letterSpacing: "0.08em" }}>Category</p>
                     <p style={{ fontSize: "18px", fontWeight: "700", color: "#FFB3B3" }}>{categoryName}</p>
                   </div>
                 )}
-                {hintsEnabled ? (
+                {showFirstLetter && word && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                    <p style={{ fontSize: "11px", color: "#C99", textTransform: "uppercase", letterSpacing: "0.08em" }}>Starts with</p>
+                    <p style={{ fontSize: "22px", fontWeight: "800", color: "#FFB3B3" }}>{firstLetter}</p>
+                  </div>
+                )}
+                {showWordLength && word && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                    <p style={{ fontSize: "11px", color: "#C99", textTransform: "uppercase", letterSpacing: "0.08em" }}>Word length</p>
+                    <p style={{ fontSize: "18px", fontWeight: "700", color: "#FFB3B3", letterSpacing: "0.15em" }}>
+                      {"_ ".repeat(letters).trim()}
+                    </p>
+                    <p style={{ fontSize: "12px", color: "#C99" }}>{letters} letters</p>
+                  </div>
+                )}
+                {hintsEnabled && (
                   <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                     <p style={{ fontSize: "11px", color: "#C99", textTransform: "uppercase", letterSpacing: "0.08em" }}>Hint</p>
                     <p style={{ fontSize: "26px", fontWeight: "800", color: "#FF6B6B" }}>{getHint(wordRow)}</p>
                   </div>
-                ) : !showCategory ? (
-                  <p style={{ fontSize: "14px", color: "#C99" }}>No hint — blend in and don&apos;t get caught.</p>
-                ) : null}
+                )}
+                {!anyClue && (
+                  <p style={{ fontSize: "14px", color: "#C99" }}>No clues — blend in and don&apos;t get caught.</p>
+                )}
               </div>
             ) : (
               <div className="card" style={{ padding: "28px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -633,12 +663,14 @@ function RevealCard({
 }
 
 function OwnRevealScreen({
-  me, hintsEnabled, showCategory, categoryName, word, wordRow, revealed, onReveal, onDone,
+  me, hintsEnabled, showCategory, categoryName, showWordLength, showFirstLetter, word, wordRow, revealed, onReveal, onDone,
 }: {
   me: Player;
   hintsEnabled: boolean;
   showCategory: boolean;
   categoryName: string | null;
+  showWordLength: boolean;
+  showFirstLetter: boolean;
   word: string | null;
   wordRow: WordRow | null;
   revealed: boolean;
@@ -651,6 +683,8 @@ function OwnRevealScreen({
       hintsEnabled={hintsEnabled}
       showCategory={showCategory}
       categoryName={categoryName}
+      showWordLength={showWordLength}
+      showFirstLetter={showFirstLetter}
       word={word}
       wordRow={wordRow}
       revealed={revealed}
@@ -662,12 +696,14 @@ function OwnRevealScreen({
 }
 
 function PassRevealScreen({
-  player, hintsEnabled, showCategory, categoryName, word, wordRow, revealed, onReveal, onDone,
+  player, hintsEnabled, showCategory, categoryName, showWordLength, showFirstLetter, word, wordRow, revealed, onReveal, onDone,
 }: {
   player: Player;
   hintsEnabled: boolean;
   showCategory: boolean;
   categoryName: string | null;
+  showWordLength: boolean;
+  showFirstLetter: boolean;
   word: string | null;
   wordRow: WordRow | null;
   revealed: boolean;
@@ -693,6 +729,8 @@ function PassRevealScreen({
       hintsEnabled={hintsEnabled}
       showCategory={showCategory}
       categoryName={categoryName}
+      showWordLength={showWordLength}
+      showFirstLetter={showFirstLetter}
       word={word}
       wordRow={wordRow}
       revealed={revealed}

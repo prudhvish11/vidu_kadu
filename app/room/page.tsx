@@ -32,6 +32,8 @@ type Room = {
   timer_seconds: number;
   hints_enabled: boolean;
   show_category: boolean;
+  show_word_length: boolean;
+  show_first_letter: boolean;
 };
 
 type Category = { id: string; name: string };
@@ -59,6 +61,8 @@ function RoomPage() {
   const [timerSeconds, setTimerSeconds] = useState(120);
   const [hintsEnabled, setHintsEnabled] = useState(true);
   const [showCategory, setShowCategory] = useState(false);
+  const [showWordLength, setShowWordLength] = useState(false);
+  const [showFirstLetter, setShowFirstLetter] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [startError, setStartError] = useState("");
 
@@ -81,6 +85,8 @@ function RoomPage() {
       setTimerSeconds(data.timer_seconds);
       setHintsEnabled(data.hints_enabled ?? true);
       setShowCategory(data.show_category ?? false);
+      setShowWordLength(data.show_word_length ?? false);
+      setShowFirstLetter(data.show_first_letter ?? false);
       setSelectedCategory(data.category_id || "");
     }
   }, [code]);
@@ -103,6 +109,8 @@ function RoomPage() {
       setTimerSeconds(roomData.timer_seconds);
       setHintsEnabled(roomData.hints_enabled ?? true);
       setShowCategory(roomData.show_category ?? false);
+      setShowWordLength(roomData.show_word_length ?? false);
+      setShowFirstLetter(roomData.show_first_letter ?? false);
       setSelectedCategory(roomData.category_id || "");
 
       await fetchPlayers(roomData.id);
@@ -171,7 +179,13 @@ function RoomPage() {
     };
     // Try to persist everything, then progressively fall back so a not-yet-added
     // column (show_category needs a migration) never blocks the other settings.
-    const full = { ...base, hints_enabled: hintsEnabled, show_category: showCategory };
+    const full = {
+      ...base,
+      hints_enabled: hintsEnabled,
+      show_category: showCategory,
+      show_word_length: showWordLength,
+      show_first_letter: showFirstLetter,
+    };
     const { error } = await supabase.from("rooms").update(full).eq("id", room.id);
     if (error) {
       const { error: e2 } = await supabase.from("rooms")
@@ -375,13 +389,16 @@ function RoomPage() {
               <span>Timer</span>
               <span style={{ color: "var(--t1)" }}>{room.timer_enabled ? `${room.timer_seconds}s` : "Off"}</span>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span>Imposter hint</span>
-              <span style={{ color: "var(--t1)" }}>{room.hints_enabled === false ? "Off" : "On"}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span>Show category</span>
-              <span style={{ color: "var(--t1)" }}>{room.show_category ? "On" : "Off"}</span>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
+              <span>Imposter sees</span>
+              <span style={{ color: "var(--t1)", textAlign: "right" }}>
+                {[
+                  room.hints_enabled === false ? null : "Hint",
+                  room.show_category ? "Category" : null,
+                  room.show_word_length ? "Length" : null,
+                  room.show_first_letter ? "First letter" : null,
+                ].filter(Boolean).join(", ") || "Nothing"}
+              </span>
             </div>
           </div>
         )}
@@ -449,28 +466,12 @@ function RoomPage() {
             )}
 
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <div className="label" style={{ margin: 0 }}>Show hint to imposter</div>
-                  <div style={{ fontSize: "11px", color: "var(--t3)", marginTop: "2px" }}>Give the imposter the word&apos;s hint</div>
-                </div>
-                <button onClick={() => setHintsEnabled(!hintsEnabled)}
-                  style={{ padding: "4px 14px", borderRadius: "20px", border: `1px solid ${hintsEnabled ? "var(--accent)" : "var(--border2)"}`, background: hintsEnabled ? "var(--accent)" : "var(--bg3)", color: hintsEnabled ? "#fff" : "var(--t2)", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>
-                  {hintsEnabled ? "On" : "Off"}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <div className="label" style={{ margin: 0 }}>Show category to imposter</div>
-                  <div style={{ fontSize: "11px", color: "var(--t3)", marginTop: "2px" }}>Reveal the category name (e.g. Telugu Movies)</div>
-                </div>
-                <button onClick={() => setShowCategory(!showCategory)}
-                  style={{ padding: "4px 14px", borderRadius: "20px", border: `1px solid ${showCategory ? "var(--accent)" : "var(--border2)"}`, background: showCategory ? "var(--accent)" : "var(--bg3)", color: showCategory ? "#fff" : "var(--t2)", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>
-                  {showCategory ? "On" : "Off"}
-                </button>
+              <div className="label" style={{ marginBottom: "4px" }}>Hints — what the imposter sees</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", background: "var(--bg3)", borderRadius: "12px", padding: "12px 14px" }}>
+                <SettingToggle label="Hint about the word" desc="The word&apos;s clue" on={hintsEnabled} onToggle={() => setHintsEnabled(!hintsEnabled)} />
+                <SettingToggle label="Category" desc="e.g. Telugu Movies" on={showCategory} onToggle={() => setShowCategory(!showCategory)} />
+                <SettingToggle label="Word length" desc="How many letters" on={showWordLength} onToggle={() => setShowWordLength(!showWordLength)} />
+                <SettingToggle label="First letter" desc="The starting letter" on={showFirstLetter} onToggle={() => setShowFirstLetter(!showFirstLetter)} />
               </div>
             </div>
 
@@ -525,6 +526,21 @@ function RoomPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function SettingToggle({ label, desc, on, onToggle }: { label: string; desc: string; on: boolean; onToggle: () => void }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+      <div>
+        <div style={{ fontSize: "14px", color: "var(--t1)", fontWeight: 500 }}>{label}</div>
+        <div style={{ fontSize: "11px", color: "var(--t3)", marginTop: "1px" }}>{desc}</div>
+      </div>
+      <button onClick={onToggle}
+        style={{ flexShrink: 0, width: "52px", padding: "5px 0", borderRadius: "20px", border: `1px solid ${on ? "var(--accent)" : "var(--border2)"}`, background: on ? "var(--accent)" : "var(--bg2)", color: on ? "#fff" : "var(--t2)", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>
+        {on ? "On" : "Off"}
+      </button>
     </div>
   );
 }
