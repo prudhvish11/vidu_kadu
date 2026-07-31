@@ -1,65 +1,154 @@
-import Image from "next/image";
+"use client";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { generateId } from "@/lib/id";
 
-export default function Home() {
+function generateCode() {
+  return Math.random().toString(36).substring(2, 6).toUpperCase();
+}
+
+function Home() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const prefillCode = searchParams.get("join") || "";
+  const [name, setName] = useState("");
+  const [joinCode, setJoinCode] = useState(prefillCode);
+  const [mode, setMode] = useState<"home" | "create" | "join">(prefillCode ? "join" : "home");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function createRoom() {
+    if (!name.trim()) { setError("Enter your name"); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const playerId = generateId();
+      let code = generateCode();
+      let exists = true;
+      while (exists) {
+        const { data } = await supabase.from("rooms").select("id").eq("code", code).single();
+        if (!data) exists = false;
+        else code = generateCode();
+      }
+      const { data: room, error: roomErr } = await supabase
+        .from("rooms").insert({ code, host_id: playerId }).select().single();
+      if (roomErr) throw roomErr;
+      const { error: playerErr } = await supabase
+        .from("players").insert({ id: playerId, room_id: room.id, name: name.trim(), is_host: true });
+      if (playerErr) throw playerErr;
+      localStorage.setItem("vk_player_id", playerId);
+      localStorage.setItem("vk_player_name", name.trim());
+      router.push(`/room?code=${room.code}`);
+    } catch (e: unknown) {
+      setError("Something went wrong. Try again.");
+      console.error(e);
+    }
+    setLoading(false);
+  }
+
+  async function joinRoom() {
+    if (!name.trim()) { setError("Enter your name"); return; }
+    if (!joinCode.trim()) { setError("Enter room code"); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const { data: room, error: roomErr } = await supabase
+        .from("rooms").select().eq("code", joinCode.trim().toUpperCase()).single();
+      if (roomErr || !room) { setError("Room not found. Check the code."); setLoading(false); return; }
+      if (room.status !== "lobby") { setError("Game already started."); setLoading(false); return; }
+
+      // check if player already in room (rejoining)
+      const existingId = localStorage.getItem("vk_player_id");
+      if (existingId) {
+        const { data: existing } = await supabase
+          .from("players").select().eq("id", existingId).eq("room_id", room.id).single();
+        if (existing) {
+          router.push(`/room?code=${room.code}`);
+          setLoading(false);
+          return;
+        }
+      }
+
+      const playerId = generateId();
+      const { error: playerErr } = await supabase
+        .from("players").insert({ id: playerId, room_id: room.id, name: name.trim(), is_host: false });
+      if (playerErr) throw playerErr;
+      localStorage.setItem("vk_player_id", playerId);
+      localStorage.setItem("vk_player_name", name.trim());
+      router.push(`/room?code=${room.code}`);
+    } catch (e: unknown) {
+      setError("Something went wrong. Try again.");
+      console.error(e);
+    }
+    setLoading(false);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div className="page">
+      <div className="screen vk-fade-up">
+        <div style={{ textAlign: "center", marginBottom: "8px" }}>
+          <div className="vk-float" style={{ fontSize: "52px", marginBottom: "8px" }}>🕵️</div>
+          <h1 style={{ fontSize: "34px", fontWeight: "800", letterSpacing: "-0.02em", background: "linear-gradient(135deg, var(--t1), var(--accent-light))", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
+            Vidu Kadhu
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+          <p style={{ fontSize: "13px", color: "var(--t3)", marginTop: "4px" }}>It&apos;s not him.</p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+
+        {mode === "home" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "16px" }}>
+            <button className="btn-primary" onClick={() => setMode("create")}>Create Room</button>
+            <button className="btn-outline" onClick={() => setMode("join")}>Join Room</button>
+          </div>
+        )}
+
+        {mode === "create" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div>
+              <div className="label">Your name</div>
+              <input className="input" placeholder="Enter your name" value={name}
+                onChange={e => setName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && createRoom()}
+                maxLength={20} autoFocus />
+            </div>
+            {error && <p style={{ fontSize: "13px", color: "var(--danger)" }}>{error}</p>}
+            <button className="btn-primary" onClick={createRoom} disabled={loading}>
+              {loading ? "Creating..." : "Create Room"}
+            </button>
+            <button className="btn-outline" onClick={() => { setMode("home"); setError(""); }}>Back</button>
+          </div>
+        )}
+
+        {mode === "join" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div>
+              <div className="label">Your name</div>
+              <input className="input" placeholder="Enter your name" value={name}
+                onChange={e => setName(e.target.value)} maxLength={20} autoFocus />
+            </div>
+            <div>
+              <div className="label">Room code</div>
+              <input className="input" placeholder="Enter 4-letter code" value={joinCode}
+                onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                onKeyDown={e => e.key === "Enter" && joinRoom()}
+                maxLength={4} style={{ letterSpacing: "0.15em", fontWeight: "500" }} />
+            </div>
+            {error && <p style={{ fontSize: "13px", color: "var(--danger)" }}>{error}</p>}
+            <button className="btn-primary" onClick={joinRoom} disabled={loading}>
+              {loading ? "Joining..." : "Join Room"}
+            </button>
+            <button className="btn-outline" onClick={() => { setMode("home"); setError(""); }}>Back</button>
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense>
+      <Home />
+    </Suspense>
   );
 }
