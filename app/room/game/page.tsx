@@ -311,8 +311,10 @@ function GamePage() {
     if (!me) return null;
     if (me.has_revealed) {
       const doneCount = players.filter((p) => p.has_revealed).length;
+      const pending = players.filter((p) => !p.has_revealed).map((p) => p.name);
       return (
-        <WaitingScreen title="Word revealed!" subtitle={`Waiting for everyone to look... (${doneCount}/${players.length})`} onLeave={leaveRoom} />
+        <WaitingScreen title="Word revealed!" subtitle={`${doneCount}/${players.length} have looked`}
+          pendingLabel="Still looking:" pending={pending} onLeave={leaveRoom} />
       );
     }
     return (
@@ -365,10 +367,13 @@ function GamePage() {
     const myVote = votes.find((v) => v.voter_id === myId);
     if (myVote) {
       const target = players.find((p) => p.id === myVote.target_id);
+      const pending = players.filter((p) => !votes.some((v) => v.voter_id === p.id)).map((p) => p.name);
       return (
         <WaitingScreen
           title={`You voted for ${target?.name || "..."}`}
-          subtitle={`Waiting for others... (${votes.length}/${players.length})`}
+          subtitle={`${votes.length}/${players.length} have voted`}
+          pendingLabel="Yet to vote:"
+          pending={pending}
           onLeave={leaveRoom}
         />
       );
@@ -545,7 +550,9 @@ function LeaveButton({ onLeave }: { onLeave: () => void }) {
   );
 }
 
-function WaitingScreen({ title, subtitle, onLeave }: { title: string; subtitle: string; onLeave?: () => void }) {
+function WaitingScreen({ title, subtitle, pending, pendingLabel, onLeave }: {
+  title: string; subtitle: string; pending?: string[]; pendingLabel?: string; onLeave?: () => void;
+}) {
   return (
     <div className="page">
       {onLeave && <LeaveButton onLeave={onLeave} />}
@@ -553,6 +560,19 @@ function WaitingScreen({ title, subtitle, onLeave }: { title: string; subtitle: 
         <div className="vk-float" style={{ fontSize: "36px" }}>⏳</div>
         <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--t1)" }}>{title}</h2>
         <p style={{ fontSize: "13px", color: "var(--t3)" }}>{subtitle}</p>
+        {pending && pending.length > 0 && (
+          <div style={{ maxWidth: "320px" }}>
+            {pendingLabel && <p style={{ fontSize: "11px", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "8px" }}>{pendingLabel}</p>}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center" }}>
+              {pending.map((name) => (
+                <span key={name} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 12px 4px 4px", borderRadius: "999px", background: "var(--bg2)", border: "1px solid var(--border2)", fontSize: "12px", color: "var(--t1)" }}>
+                  <span className="avatar" style={{ width: "20px", height: "20px", fontSize: "10px", background: avatarColor(name) }}>{name[0].toUpperCase()}</span>
+                  {name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="spinner" style={{ marginTop: "4px" }} />
       </div>
     </div>

@@ -533,9 +533,11 @@ function RoomPage() {
               )}
             </div>
 
-            <button className="btn-primary" onClick={saveSettings} disabled={savingSettings}>
-              {savingSettings ? "Saving..." : "Save Settings"}
-            </button>
+            <div style={{ position: "sticky", bottom: 0, margin: "0 -20px -24px", padding: "12px 20px calc(24px + env(safe-area-inset-bottom))", background: "var(--bg2)", borderTop: "1px solid var(--border)" }}>
+              <button className="btn-primary" onClick={saveSettings} disabled={savingSettings}>
+                {savingSettings ? "Saving..." : "Save Settings"}
+              </button>
+            </div>
 
           </div>
         </div>
