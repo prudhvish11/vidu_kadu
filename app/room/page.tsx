@@ -26,6 +26,7 @@ type Room = {
   status: string;
   word: string | null;
   category_id: string | null;
+  category_ids: string[] | null;
   imposter_count: number;
   reveal_mode: string;
   timer_enabled: boolean;
@@ -37,7 +38,6 @@ type Room = {
 };
 
 type Category = { id: string; name: string };
-type Word = { id: string; word: string };
 
 function RoomPage() {
   const searchParams = useSearchParams();
@@ -52,9 +52,7 @@ function RoomPage() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [words, setWords] = useState<Word[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [selectedWord, setSelectedWord] = useState<string>("");
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [imposterCount, setImposterCount] = useState(1);
   const [revealMode, setRevealMode] = useState<"own" | "pass">("own");
   const [timerEnabled, setTimerEnabled] = useState(false);
@@ -87,7 +85,7 @@ function RoomPage() {
       setShowCategory(data.show_category ?? false);
       setShowWordLength(data.show_word_length ?? false);
       setShowFirstLetter(data.show_first_letter ?? false);
-      setSelectedCategory(data.category_id || "");
+      setSelectedCategoryIds(catIdsFromRoom(data));
     }
   }, [code]);
 
@@ -111,7 +109,7 @@ function RoomPage() {
       setShowCategory(roomData.show_category ?? false);
       setShowWordLength(roomData.show_word_length ?? false);
       setShowFirstLetter(roomData.show_first_letter ?? false);
-      setSelectedCategory(roomData.category_id || "");
+      setSelectedCategoryIds(catIdsFromRoom(roomData));
 
       await fetchPlayers(roomData.id);
 
@@ -157,12 +155,16 @@ function RoomPage() {
       .then(({ data }) => { if (data) setCategories(data); });
   }, []);
 
-  // Load words when category changes
-  useEffect(() => {
-    if (!selectedCategory) { setWords([]); return; }
-    supabase.from("words").select().eq("category_id", selectedCategory)
-      .then(({ data }) => { if (data) setWords(data); });
-  }, [selectedCategory]);
+  const allCategoryIds = categories.map(c => c.id);
+  // [] means "all"; visually every chip is on until the host narrows.
+  const catSelected = (id: string) => selectedCategoryIds.length === 0 || selectedCategoryIds.includes(id);
+  function toggleCategory(id: string) {
+    setSelectedCategoryIds(prev => {
+      const current = prev.length ? prev : allCategoryIds;
+      const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id];
+      return next.length === allCategoryIds.length ? [] : next; // re-selecting all collapses to "all"
+    });
+  }
 
   async function saveSettings() {
     if (!room) return;
@@ -172,13 +174,11 @@ function RoomPage() {
       reveal_mode: revealMode,
       timer_enabled: timerEnabled,
       timer_seconds: timerSeconds,
-      category_id: selectedCategory || null,
-      // Only pin a specific word if the host picked one; otherwise leave it null
-      // so a fresh (random) word is drawn at each game start.
-      word: selectedWord || null,
+      category_id: selectedCategoryIds.length === 1 ? selectedCategoryIds[0] : null,
+      // The host plays too (and can be the imposter), so they never pick the
+      // word — it's always drawn at random when the game starts.
+      word: null,
     };
-    // Try to persist everything, then progressively fall back so a not-yet-added
-    // column (show_category needs a migration) never blocks the other settings.
     const full = {
       ...base,
       hints_enabled: hintsEnabled,
@@ -186,11 +186,15 @@ function RoomPage() {
       show_word_length: showWordLength,
       show_first_letter: showFirstLetter,
     };
-    const { error } = await supabase.from("rooms").update(full).eq("id", room.id);
+    // Persist everything, then progressively fall back so a not-yet-migrated
+    // column (category_ids / show_* ) never blocks the other settings.
+    const { error } = await supabase.from("rooms").update({ ...full, category_ids: selectedCategoryIds }).eq("id", room.id);
     if (error) {
-      const { error: e2 } = await supabase.from("rooms")
-        .update({ ...base, hints_enabled: hintsEnabled }).eq("id", room.id);
-      if (e2) await supabase.from("rooms").update(base).eq("id", room.id);
+      const { error: e2 } = await supabase.from("rooms").update(full).eq("id", room.id);
+      if (e2) {
+        const { error: e3 } = await supabase.from("rooms").update({ ...base, hints_enabled: hintsEnabled }).eq("id", room.id);
+        if (e3) await supabase.from("rooms").update(base).eq("id", room.id);
+      }
     }
     setSavingSettings(false);
     setShowSettings(false);
@@ -201,19 +205,12 @@ function RoomPage() {
     setStartError("");
     if (players.length < 3) { setStartError("Need at least 3 players to start."); return; }
 
-    // Resolve the word: a specific one if the host chose it, otherwise a random
-    // word from the chosen category — or from a random category if none picked.
-    let word = room.word;
-    if (!word) {
-      let categoryId = selectedCategory;
-      if (!categoryId) {
-        if (categories.length === 0) { setStartError("No categories available yet."); return; }
-        categoryId = categories[Math.floor(Math.random() * categories.length)].id;
-      }
-      const { data: pool } = await supabase.from("words").select("word").eq("category_id", categoryId);
-      if (!pool || pool.length === 0) { setStartError("That category has no words. Pick another."); return; }
-      word = pool[Math.floor(Math.random() * pool.length)].word;
-    }
+    // Always draw a random word from the selected categories (all if none narrowed).
+    const pool = selectedCategoryIds.length ? selectedCategoryIds : allCategoryIds;
+    if (pool.length === 0) { setStartError("No categories available yet."); return; }
+    const { data: wpool } = await supabase.from("words").select("word").in("category_id", pool);
+    if (!wpool || wpool.length === 0) { setStartError("The selected categories have no words."); return; }
+    const word = wpool[Math.floor(Math.random() * wpool.length)].word;
 
     const shuffled = [...players].sort(() => Math.random() - 0.5);
     const imposterIds = shuffled.slice(0, imposterCount).map(p => p.id);
@@ -381,9 +378,9 @@ function RoomPage() {
         {room && (
           <div className="card" style={{ fontSize: "12px", color: "var(--t2)", display: "flex", flexDirection: "column", gap: "6px" }}>
             <div style={{ fontSize: "11px", fontWeight: "500", color: "var(--t3)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Game settings</div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span>Category</span>
-              <span style={{ color: "var(--t1)" }}>{categories.find(c => c.id === room.category_id)?.name || "🎲 Random"}</span>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
+              <span>Categories</span>
+              <span style={{ color: "var(--t1)", textAlign: "right" }}>{categorySummary(room, categories)}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span>Imposters</span>
@@ -452,26 +449,35 @@ function RoomPage() {
             </div>
 
             <div>
-              <div className="label">Category</div>
-              <select className="input" value={selectedCategory}
-                onChange={e => { setSelectedCategory(e.target.value); setSelectedWord(""); }}
-                style={{ appearance: "none" }}>
-                <option value="">🎲 Random category</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <div className="label" style={{ margin: 0 }}>Categories</div>
+                <button onClick={() => setSelectedCategoryIds([])}
+                  style={{ fontSize: "11px", fontWeight: 600, color: "var(--accent-dark)", background: "none", border: "none", cursor: "pointer" }}>
+                  Select all
+                </button>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {categories.map(c => {
+                  const sel = catSelected(c.id);
+                  return (
+                    <button key={c.id} onClick={() => toggleCategory(c.id)}
+                      style={{ padding: "7px 13px", borderRadius: "999px", fontSize: "12px", fontWeight: 600, cursor: "pointer",
+                        border: `1px solid ${sel ? "var(--accent)" : "var(--border2)"}`,
+                        background: sel ? "var(--accent)" : "var(--bg3)", color: sel ? "#fff" : "var(--t2)" }}>
+                      {c.name}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: "11px", color: "var(--t3)", marginTop: "7px" }}>
+                {selectedCategoryIds.length === 0
+                  ? "🎲 Random word from all categories"
+                  : selectedCategoryIds.length === 1
+                    ? "Random word from this category"
+                    : `🎲 Random word from ${selectedCategoryIds.length} selected categories`}
+              </div>
             </div>
 
-            {selectedCategory && words.length > 0 && (
-              <div>
-                <div className="label">Word (blank = random)</div>
-                <select className="input" value={selectedWord}
-                  onChange={e => setSelectedWord(e.target.value)}
-                  style={{ appearance: "none" }}>
-                  <option value="">Random word</option>
-                  {words.map(w => <option key={w.id} value={w.word}>{w.word}</option>)}
-                </select>
-              </div>
-            )}
 
             <div>
               <div className="label" style={{ marginBottom: "4px" }}>Hints — what the imposter sees</div>
@@ -536,6 +542,20 @@ function RoomPage() {
       )}
     </div>
   );
+}
+
+// The selected category pool: explicit list, or [] meaning "all" (with a
+// legacy fallback to the old single category_id).
+function catIdsFromRoom(r: { category_ids?: string[] | null; category_id?: string | null }): string[] {
+  if (Array.isArray(r.category_ids) && r.category_ids.length) return r.category_ids;
+  return r.category_id ? [r.category_id] : [];
+}
+
+function categorySummary(room: Room, categories: Category[]): string {
+  const ids = catIdsFromRoom(room);
+  if (ids.length === 0 || ids.length === categories.length) return "🎲 All (random)";
+  if (ids.length === 1) return categories.find(c => c.id === ids[0])?.name || "1 category";
+  return `🎲 ${ids.length} categories`;
 }
 
 function SettingToggle({ label, desc, on, onToggle }: { label: string; desc: string; on: boolean; onToggle: () => void }) {
