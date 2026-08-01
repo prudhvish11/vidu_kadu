@@ -42,7 +42,7 @@ Home → Lobby → **Word reveal** (own-phone or pass-device; hold-to-reveal wit
 
 Crew sees the word. The imposter sees only the clues the host enabled (below). Result logic: the most-voted player is "caught"; ties favor the imposter.
 
-The word (and category, if random) is drawn in `startGame` — so `word`/`category_id` are left null in the lobby and resolved fresh at each start (Play Again re-randomizes).
+The **word is always drawn at random** in `startGame` (the host plays too and can be the imposter, so they never pick/see the word) — resolved fresh at each start, so Play Again re-randomizes.
 
 ## Host settings ("Hints — what the imposter sees")
 Four independent on/off toggles, each controlling one clue on the imposter's card:
@@ -54,7 +54,7 @@ Four independent on/off toggles, each controlling one clue on the imposter's car
 | First letter | `rooms.show_first_letter` | derived from `word` |
 The category clue name comes from the chosen word's own category (`words.category_id` → `categories.name`), so it works even when the room category is random.
 
-Plus: **category picker — defaults to "🎲 Random category"** (host can pick a specific one), optional specific-word picker, imposter count (1–3), reveal mode (own/pass), discussion timer. Random category = `rooms.category_id` stays null; `startGame` picks a random category + word.
+Plus: **category multi-select** — chips for every category; the host includes a subset and the word is drawn at random from the **union** of the selected categories. Selection is stored in `rooms.category_ids` (jsonb); `[]` means "all". There is **no word picker** (word is always random). Also: imposter count (1–3), reveal mode (own/pass), discussion timer.
 
 ## Players leaving / disconnects
 - **Leave button** deletes the player row + their votes (lobby and game).
@@ -65,7 +65,7 @@ Plus: **category picker — defaults to "🎲 Random category"** (host can pick 
 Mango Fizz light palette, drifting **aurora** backdrop, **Apple Liquid Glass** cards/buttons (refraction, specular edge, squircle corners, hover sheen), ticket-style room code, colored avatars + online dots, animated vote bars, dramatic flip reveal, confetti, **sound + haptics** with a persisted mute toggle (🔊 top-right). Fully responsive (`100dvh`, safe-area insets, `clamp()` type, centered column that scales up on tablets/laptops/large screens).
 
 ## Supabase schema (current)
-- `rooms`: `id, code, host_id, status ('lobby'|'playing'|'voting'|'reveal'), word, category_id, imposter_count, reveal_mode ('own'|'pass'), timer_enabled, timer_seconds, hints_enabled, show_category, show_word_length, show_first_letter, created_at`
+- `rooms`: `id, code, host_id, status ('lobby'|'playing'|'voting'|'reveal'), word, category_id (legacy single, may be null), category_ids (jsonb — selected category subset; `[]` = all), imposter_count, reveal_mode ('own'|'pass'), timer_enabled, timer_seconds, hints_enabled, show_category, show_word_length, show_first_letter, created_at`
 - `players`: `id, room_id, name, is_host, is_imposter, is_eliminated, has_revealed, wins, losses, times_caught, joined_at`
 - `votes`: `id, room_id, voter_id, target_id`
 - `categories`: `id, name` · `words`: `id, category_id, word, hint`
