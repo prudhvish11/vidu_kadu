@@ -88,6 +88,7 @@ function RoomPage() {
       // Category selection is initialized once by the effect below (needs the
       // categories list too), so it isn't overwritten on every room update.
     }
+    return data;
   }, [code]);
 
   useEffect(() => {
@@ -128,24 +129,49 @@ function RoomPage() {
     init();
   }, [code, router, fetchPlayers]);
 
-  // Realtime subscriptions
+  // Realtime subscriptions. Keyed on room.id (not the whole room object) so the
+  // channel isn't torn down and rebuilt on every settings/roster change.
   useEffect(() => {
-    if (!room) return;
-    const channel = supabase.channel(`lobby-${room.id}`)
+    const roomId = room?.id;
+    if (!roomId) return;
+    const channel = supabase.channel(`lobby-${roomId}`)
       .on("postgres_changes",
-        { event: "*", schema: "public", table: "players", filter: `room_id=eq.${room.id}` },
-        () => fetchPlayers(room.id))
+        { event: "*", schema: "public", table: "players", filter: `room_id=eq.${roomId}` },
+        () => fetchPlayers(roomId))
       .on("postgres_changes",
-        { event: "*", schema: "public", table: "rooms", filter: `id=eq.${room.id}` },
+        { event: "*", schema: "public", table: "rooms", filter: `id=eq.${roomId}` },
         async () => {
-          await fetchRoom();
-          const { data } = await supabase
-            .from("rooms").select("status").eq("id", room.id).single();
-          if (data?.status === "playing") router.push(`/room/game?code=${code}`);
+          const updated = await fetchRoom();
+          if (updated?.status === "playing") router.push(`/room/game?code=${code}`);
         })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [room, fetchPlayers, fetchRoom, code, router]);
+  }, [room?.id, fetchPlayers, fetchRoom, code, router]);
+
+  // Catch-up sync. iOS Safari suspends the Realtime socket when the phone locks
+  // or the tab is backgrounded, so a phone can miss the host pressing "Start".
+  // Re-fetch on foreground plus a light poll so every device starts on time.
+  useEffect(() => {
+    const roomId = room?.id;
+    if (!roomId) return;
+    const sync = () => {
+      fetchRoom().then((updated) => {
+        if (updated?.status === "playing") router.push(`/room/game?code=${code}`);
+      });
+      fetchPlayers(roomId);
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") sync(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    window.addEventListener("pageshow", onVisible);
+    const iv = setInterval(() => { if (document.visibilityState === "visible") sync(); }, 4000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+      window.removeEventListener("pageshow", onVisible);
+      clearInterval(iv);
+    };
+  }, [room?.id, fetchPlayers, fetchRoom, code, router]);
 
   // Track live connections; auto-removes players who disconnect.
   const onlineIds = useRoomPresence(room?.id ?? null, myId, players);

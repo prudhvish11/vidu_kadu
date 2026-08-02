@@ -129,23 +129,53 @@ function GamePage() {
     init();
   }, [code, router, fetchPlayers, fetchVotes]);
 
-  // Realtime subscriptions
+  // Realtime subscriptions. Keyed on room.id (not the whole room object) so the
+  // channel isn't torn down and rebuilt on every phase change — that rebuild
+  // leaves a brief window where pushes are missed.
   useEffect(() => {
-    if (!room) return;
+    const roomId = room?.id;
+    if (!roomId) return;
     const channel = supabase
-      .channel(`game-${room.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "players", filter: `room_id=eq.${room.id}` },
-        () => fetchPlayers(room.id))
-      .on("postgres_changes", { event: "*", schema: "public", table: "votes", filter: `room_id=eq.${room.id}` },
-        () => fetchVotes(room.id))
-      .on("postgres_changes", { event: "*", schema: "public", table: "rooms", filter: `id=eq.${room.id}` },
+      .channel(`game-${roomId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "players", filter: `room_id=eq.${roomId}` },
+        () => fetchPlayers(roomId))
+      .on("postgres_changes", { event: "*", schema: "public", table: "votes", filter: `room_id=eq.${roomId}` },
+        () => fetchVotes(roomId))
+      .on("postgres_changes", { event: "*", schema: "public", table: "rooms", filter: `id=eq.${roomId}` },
         async () => {
           const updated = await fetchRoom();
           if (updated?.status === "lobby") router.push(`/room?code=${code}`);
         })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [room, fetchPlayers, fetchVotes, fetchRoom, code, router]);
+  }, [room?.id, fetchPlayers, fetchVotes, fetchRoom, code, router]);
+
+  // Catch-up sync. iOS Safari suspends the Realtime socket when the phone locks
+  // or the tab is backgrounded, so pushes alone let a phone fall behind. Re-fetch
+  // whenever we return to the foreground, plus a light poll as a safety net, so
+  // every device advances within a few seconds even if its socket is asleep.
+  useEffect(() => {
+    const roomId = room?.id;
+    if (!roomId) return;
+    const sync = () => {
+      fetchRoom().then((updated) => {
+        if (updated?.status === "lobby") router.push(`/room?code=${code}`);
+      });
+      fetchPlayers(roomId);
+      fetchVotes(roomId);
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") sync(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    window.addEventListener("pageshow", onVisible);
+    const iv = setInterval(() => { if (document.visibilityState === "visible") sync(); }, 4000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+      window.removeEventListener("pageshow", onVisible);
+      clearInterval(iv);
+    };
+  }, [room?.id, fetchRoom, fetchPlayers, fetchVotes, code, router]);
 
   // hints default to ON, the rest default OFF when the column is null/absent.
   const hintsEnabled = room?.hints_enabled ?? true;
