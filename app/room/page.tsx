@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useRoomPresence, removePlayerFromRoom } from "@/lib/presence";
@@ -85,7 +85,8 @@ function RoomPage() {
       setShowCategory(data.show_category ?? false);
       setShowWordLength(data.show_word_length ?? false);
       setShowFirstLetter(data.show_first_letter ?? false);
-      setSelectedCategoryIds(catIdsFromRoom(data));
+      // Category selection is initialized once by the effect below (needs the
+      // categories list too), so it isn't overwritten on every room update.
     }
   }, [code]);
 
@@ -115,7 +116,6 @@ function RoomPage() {
       setShowCategory(roomData.show_category ?? false);
       setShowWordLength(roomData.show_word_length ?? false);
       setShowFirstLetter(roomData.show_first_letter ?? false);
-      setSelectedCategoryIds(catIdsFromRoom(roomData));
 
       await fetchPlayers(roomData.id);
 
@@ -161,15 +161,22 @@ function RoomPage() {
       .then(({ data }) => { if (data) setCategories(data); });
   }, []);
 
+  // Category selection is an explicit list of ids. Initialize once, after both
+  // the room and the categories are loaded: use the stored subset, or default a
+  // room with no stored selection to "all". Runs once so "Deselect all" sticks.
+  const didInitCats = useRef(false);
+  useEffect(() => {
+    if (didInitCats.current || categories.length === 0 || !room) return;
+    didInitCats.current = true;
+    const stored = catIdsFromRoom(room);
+    setSelectedCategoryIds(stored.length ? stored : categories.map(c => c.id));
+  }, [categories, room]);
+
   const allCategoryIds = categories.map(c => c.id);
-  // [] means "all"; visually every chip is on until the host narrows.
-  const catSelected = (id: string) => selectedCategoryIds.length === 0 || selectedCategoryIds.includes(id);
+  const catSelected = (id: string) => selectedCategoryIds.includes(id);
   function toggleCategory(id: string) {
-    setSelectedCategoryIds(prev => {
-      const current = prev.length ? prev : allCategoryIds;
-      const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id];
-      return next.length === allCategoryIds.length ? [] : next; // re-selecting all collapses to "all"
-    });
+    setSelectedCategoryIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
 
   async function saveSettings() {
@@ -466,10 +473,16 @@ function RoomPage() {
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                 <div className="label" style={{ margin: 0 }}>Categories</div>
-                <button onClick={() => setSelectedCategoryIds([])}
-                  style={{ fontSize: "11px", fontWeight: 600, color: "var(--accent-dark)", background: "none", border: "none", cursor: "pointer" }}>
-                  Select all
-                </button>
+                <div style={{ display: "flex", gap: "14px" }}>
+                  <button onClick={() => setSelectedCategoryIds(allCategoryIds)}
+                    style={{ fontSize: "11px", fontWeight: 600, color: "var(--accent-dark)", background: "none", border: "none", cursor: "pointer" }}>
+                    Select all
+                  </button>
+                  <button onClick={() => setSelectedCategoryIds([])}
+                    style={{ fontSize: "11px", fontWeight: 600, color: "var(--t3)", background: "none", border: "none", cursor: "pointer" }}>
+                    Deselect all
+                  </button>
+                </div>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                 {categories.map(c => {
@@ -486,10 +499,12 @@ function RoomPage() {
               </div>
               <div style={{ fontSize: "11px", color: "var(--t3)", marginTop: "7px" }}>
                 {selectedCategoryIds.length === 0
-                  ? "🎲 Random word from all categories"
-                  : selectedCategoryIds.length === 1
-                    ? "Random word from this category"
-                    : `🎲 Random word from ${selectedCategoryIds.length} selected categories`}
+                  ? "Pick at least one (otherwise all are used)"
+                  : selectedCategoryIds.length === allCategoryIds.length
+                    ? "🎲 Random word from all categories"
+                    : selectedCategoryIds.length === 1
+                      ? "Random word from this category"
+                      : `🎲 Random word from ${selectedCategoryIds.length} selected categories`}
               </div>
             </div>
 

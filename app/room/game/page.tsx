@@ -50,7 +50,6 @@ type Vote = { id: string; voter_id: string; target_id: string };
 // Reveal ("who was the imposter") plays out in local, per-round steps that
 // aren't stored in the DB — only room.status ("playing" | "voting" | "reveal")
 // is shared across clients.
-type RevealStep = "votes" | "result" | "scoreboard";
 
 function computeResult(players: Player[], votes: Vote[]) {
   const tally = new Map<string, number>();
@@ -88,8 +87,6 @@ function GamePage() {
   const [revealed, setRevealed] = useState(false); // has *this* card been tapped open
   const [selectedTarget, setSelectedTarget] = useState("");
   const [votingBusy, setVotingBusy] = useState(false);
-  const [revealStep, setRevealStep] = useState<RevealStep>("votes");
-  const [showWhoVoted, setShowWhoVoted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [playAgainBusy, setPlayAgainBusy] = useState(false);
 
@@ -180,22 +177,20 @@ function GamePage() {
   useEffect(() => {
     setRevealed(false);
     setSelectedTarget("");
-    setRevealStep("votes");
-    setShowWhoVoted(false);
   }, [room?.status]);
 
   useEffect(() => {
     if (room?.status !== "voting") votingAdvancedRef.current = false;
   }, [room?.status]);
 
-  // Win/lose sting when the result is shown.
+  // Win/lose sting when the reveal screen appears.
   useEffect(() => {
-    if (room?.status === "reveal" && revealStep === "result") {
+    if (room?.status === "reveal") {
       if (computeResult(players, votes).crewWins) sfx.win();
       else sfx.lose();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealStep, room?.status]);
+  }, [room?.status]);
 
   // Track live connections; auto-removes players who disconnect mid-game.
   useRoomPresence(room?.id ?? null, myId, players);
@@ -419,95 +414,68 @@ function GamePage() {
 
   // ---- Phase: reveal (votes → result → scoreboard) ----
   if (room.status === "reveal") {
-    if (revealStep === "votes") {
-      const maxVotes = Math.max(1, ...players.map((p) => votes.filter((v) => v.target_id === p.id).length));
-      return (
-        <div className="page" style={{ justifyContent: "flex-start", paddingTop: "clamp(24px, 6vh, 48px)" }}>
-          <LeaveButton onLeave={leaveRoom} />
-          <SoundToggle />
-          <div className="screen vk-phase">
-            <h2 style={{ fontSize: "20px", fontWeight: "700", color: "var(--t1)", textAlign: "center" }}>Votes are in</h2>
-            <div className="card" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              {players.map((p) => {
-                const count = votes.filter((v) => v.target_id === p.id).length;
-                return (
-                  <div key={p.id}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--t1)", marginBottom: "5px" }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <span className="avatar" style={{ width: "22px", height: "22px", fontSize: "10px", background: avatarColor(p.name) }}>{p.name[0].toUpperCase()}</span>
-                        {p.name}
-                      </span>
-                      <span style={{ color: "var(--t2)", fontWeight: "600" }}>{count}</span>
-                    </div>
-                    <div style={{ height: "9px", background: "var(--bg3)", borderRadius: "5px", overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${(count / maxVotes) * 100}%`, background: "linear-gradient(90deg, var(--accent-light), var(--accent))", borderRadius: "5px", animation: "vk-bar 0.6s ease both" }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <button className="btn-outline" onClick={() => { sfx.tap(); setShowWhoVoted((s) => !s); }}>
-              {showWhoVoted ? "Hide" : "Show"} who voted for whom
-            </button>
-            {showWhoVoted && (
-              <div className="card" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                {votes.map((v) => (
-                  <div key={v.id} style={{ fontSize: "13px", color: "var(--t2)", display: "flex", justifyContent: "space-between" }}>
-                    <span>{players.find((p) => p.id === v.voter_id)?.name || "?"}</span>
-                    <span style={{ color: "var(--t1)" }}>→ {players.find((p) => p.id === v.target_id)?.name || "?"}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button className="btn-primary" onClick={() => { sfx.tap(); setRevealStep("result"); }}>Reveal Imposter →</button>
-          </div>
-        </div>
-      );
-    }
-
-    if (revealStep === "result") {
-      const { crewWins } = computeResult(players, votes);
-      const imposters = players.filter((p) => p.is_imposter);
-      return (
-        <div className="page" style={{ background: crewWins ? undefined : "radial-gradient(circle at 50% 30%, #2A0F0F, #140707)" }}>
-          {crewWins && <Confetti />}
-          <SoundToggle />
-          <div className="screen" style={{ textAlign: "center", gap: "16px" }}>
-            <div className="vk-pop" style={{ fontSize: "60px" }}>{crewWins ? "🎉" : "😈"}</div>
-            <h2 className="vk-pop" style={{ fontSize: "28px", fontWeight: "800", color: crewWins ? "var(--accent-light)" : "var(--danger)", animationDelay: "0.08s" }}>
-              {crewWins ? "Crew Wins!" : "Imposter Wins!"}
-            </h2>
-            <p className="vk-fade-up" style={{ fontSize: "14px", color: "var(--t2)", animationDelay: "0.2s" }}>
-              {imposters.length > 1 ? "The imposters were" : "The imposter was"}{" "}
-              <strong style={{ color: "var(--t1)" }}>{imposters.map((p) => p.name).join(", ")}</strong>
-            </p>
-            {room.word && (
-              <p className="vk-fade-up" style={{ fontSize: "13px", color: "var(--t3)", animationDelay: "0.28s" }}>The word was <strong style={{ color: "var(--t1)" }}>{room.word}</strong></p>
-            )}
-            <button className="btn-primary" onClick={() => { sfx.tap(); setRevealStep("scoreboard"); }}>See Scoreboard →</button>
-          </div>
-        </div>
-      );
-    }
-
-    // scoreboard
+    // Everything auto-shows on one screen once voting completes — result,
+    // vote tally (with who voted for whom), and scoreboard — no click-through.
+    const { crewWins } = computeResult(players, votes);
+    const imposters = players.filter((p) => p.is_imposter);
+    const maxVotes = Math.max(1, ...players.map((p) => votes.filter((v) => v.target_id === p.id).length));
     const sorted = [...players].sort((a, b) => b.wins - a.wins);
     const medals = ["🥇", "🥈", "🥉"];
     return (
-      <div className="page" style={{ justifyContent: "flex-start", paddingTop: "clamp(24px, 6vh, 48px)" }}>
+      <div className="page" style={{ justifyContent: "flex-start", paddingTop: "clamp(20px, 4vh, 36px)" }}>
+        {crewWins && <Confetti />}
         <LeaveButton onLeave={leaveRoom} />
         <SoundToggle />
-        <div className="screen vk-phase">
-          <h2 style={{ fontSize: "20px", fontWeight: "700", color: "var(--t1)", textAlign: "center" }}>🏆 Scoreboard</h2>
+        <div className="screen vk-phase" style={{ gap: "16px" }}>
+
+          <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div className="vk-pop" style={{ fontSize: "56px" }}>{crewWins ? "🎉" : "😈"}</div>
+            <h2 className="vk-pop" style={{ fontSize: "26px", fontWeight: "800", color: crewWins ? "var(--accent-light)" : "var(--danger)", animationDelay: "0.08s" }}>
+              {crewWins ? "Crew Wins!" : "Imposter Wins!"}
+            </h2>
+            <p style={{ fontSize: "14px", color: "var(--t2)" }}>
+              {imposters.length > 1 ? "The imposters were " : "The imposter was "}
+              <strong style={{ color: "var(--t1)" }}>{imposters.map((p) => p.name).join(", ")}</strong>
+            </p>
+            {room.word && (
+              <p style={{ fontSize: "13px", color: "var(--t3)" }}>The word was <strong style={{ color: "var(--t1)" }}>{room.word}</strong></p>
+            )}
+          </div>
+
+          <div className="card" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div className="label" style={{ margin: 0 }}>Votes</div>
+            {players.map((p) => {
+              const targeters = votes.filter((v) => v.target_id === p.id);
+              const voters = targeters.map((v) => players.find((x) => x.id === v.voter_id)?.name).filter(Boolean);
+              return (
+                <div key={p.id}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--t1)", marginBottom: "5px" }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span className="avatar" style={{ width: "22px", height: "22px", fontSize: "10px", background: avatarColor(p.name) }}>{p.name[0].toUpperCase()}</span>
+                      {p.name}{p.is_imposter ? " 🎭" : ""}
+                    </span>
+                    <span style={{ color: "var(--t2)", fontWeight: "600" }}>{targeters.length}</span>
+                  </div>
+                  <div style={{ height: "9px", background: "var(--bg3)", borderRadius: "5px", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${(targeters.length / maxVotes) * 100}%`, background: "linear-gradient(90deg, var(--accent-light), var(--accent))", borderRadius: "5px", animation: "vk-bar 0.6s ease both" }} />
+                  </div>
+                  {voters.length > 0 && (
+                    <div style={{ fontSize: "11px", color: "var(--t3)", marginTop: "3px" }}>← {voters.join(", ")}</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
           <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0" }}>
             <div style={{ display: "flex", fontSize: "10px", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 0 8px", borderBottom: "0.5px solid var(--border)" }}>
-              <span style={{ flex: 1 }}>Player</span>
+              <span style={{ flex: 1 }}>🏆 Scoreboard</span>
               <span style={{ width: "40px", textAlign: "center" }}>W</span>
               <span style={{ width: "40px", textAlign: "center" }}>L</span>
               <span style={{ width: "56px", textAlign: "center" }}>Caught</span>
             </div>
             {sorted.map((p, i) => (
-              <div key={p.id} className="vk-fade-up" style={{ display: "flex", alignItems: "center", gap: "9px", fontSize: "14px", color: "var(--t1)", padding: "10px 0", borderBottom: i < sorted.length - 1 ? "0.5px solid var(--border)" : "none", animationDelay: `${i * 0.06}s` }}>
+              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: "9px", fontSize: "14px", color: "var(--t1)", padding: "10px 0", borderBottom: i < sorted.length - 1 ? "0.5px solid var(--border)" : "none" }}>
                 <span style={{ width: "20px", textAlign: "center", fontSize: "14px" }}>{medals[i] || <span style={{ color: "var(--t3)", fontSize: "12px" }}>{i + 1}</span>}</span>
                 <span className="avatar" style={{ width: "26px", height: "26px", fontSize: "11px", background: avatarColor(p.name) }}>{p.name[0].toUpperCase()}</span>
                 <span style={{ flex: 1 }}>{p.name}{p.id === myId ? " (you)" : ""}</span>
@@ -517,6 +485,7 @@ function GamePage() {
               </div>
             ))}
           </div>
+
           {isHost ? (
             <button className="btn-primary" onClick={() => { sfx.tap(); playAgain(); }} disabled={playAgainBusy}>
               {playAgainBusy ? "Starting..." : "Play Again"}
