@@ -70,6 +70,23 @@ function computeResult(players: Player[], votes: Vote[]) {
   return { tally, topPlayer, tie, crewWins };
 }
 
+// The discussion turn order, starting from a randomly-chosen player (which may
+// be a crew member OR the imposter — every player is eligible). Derived from a
+// tiny hash of shared per-round state so every device shows the SAME order
+// without storing anything, and it changes every round: the word is re-drawn
+// and the imposter(s) re-assigned each round, so the seed shifts even if the
+// same word happens to come up twice. `players` is in the same order on every
+// client (always fetched ordered by joined_at).
+function startingOrder(players: Player[], room: Room): Player[] {
+  if (players.length === 0) return [];
+  const imposterKey = players.filter((p) => p.is_imposter).map((p) => p.id).sort().join(",");
+  const seed = `${room.word ?? ""}|${imposterKey}`;
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  const start = h % players.length;
+  return [...players.slice(start), ...players.slice(0, start)];
+}
+
 function GamePage() {
   const searchParams = useSearchParams();
   const code = searchParams.get("code") || "";
@@ -366,6 +383,7 @@ function GamePage() {
   if (room.status === "playing" && allRevealed) {
     const mm = String(Math.floor(timeLeft / 60)).padStart(2, "0");
     const ss = String(timeLeft % 60).padStart(2, "0");
+    const order = startingOrder(players, room);
     return (
       <div className="page">
         <LeaveButton onLeave={leaveRoom} />
@@ -374,6 +392,34 @@ function GamePage() {
           <div className="vk-float" style={{ fontSize: "44px" }}>🗣️</div>
           <h2 style={{ fontSize: "22px", fontWeight: "700", color: "var(--t1)" }}>Discussion time</h2>
           <p style={{ fontSize: "13px", color: "var(--t2)" }}>Talk it out — who doesn&apos;t know the word?</p>
+
+          <div className="glass" style={{ padding: "16px", borderRadius: "18px", width: "100%" }}>
+            <p style={{ fontSize: "12px", fontWeight: "700", letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--t3)", marginBottom: "12px" }}>
+              🎤 Speaking order
+            </p>
+            <p style={{ fontSize: "15px", color: "var(--t2)", marginBottom: "14px" }}>
+              <strong style={{ color: "var(--accent-dark)" }}>{order[0]?.name}</strong> starts
+              {order.length > 1 && <> · <strong style={{ color: "var(--t1)" }}>{order[order.length - 1]?.name}</strong> ends</>}
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center", alignItems: "center" }}>
+              {order.map((p, i) => (
+                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "7px", padding: "6px 12px 6px 8px", borderRadius: "999px",
+                    background: i === 0 ? "var(--accent)" : "var(--bg2)",
+                    border: i === 0 ? "none" : "1px solid var(--border)" }}>
+                    <span style={{ display: "grid", placeItems: "center", width: "22px", height: "22px", borderRadius: "50%", background: avatarColor(p.name), color: "#fff", fontSize: "11px", fontWeight: "700" }}>
+                      {i + 1}
+                    </span>
+                    <span style={{ fontSize: "14px", fontWeight: i === 0 ? "700" : "500", color: i === 0 ? "#fff" : "var(--t1)" }}>
+                      {p.name}
+                    </span>
+                  </div>
+                  {i < order.length - 1 && <span style={{ color: "var(--t3)", fontSize: "13px" }}>→</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+
           {room.timer_enabled && (
             <div className={timeLeft <= 10 && timeLeft > 0 ? "vk-pulse" : undefined}
               style={{ fontSize: "52px", fontWeight: "800", color: timeLeft === 0 ? "var(--danger)" : "var(--accent)", letterSpacing: "0.03em", fontVariantNumeric: "tabular-nums" }}>

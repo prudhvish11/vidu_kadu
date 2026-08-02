@@ -47,7 +47,9 @@ Room code lives in the **query string** (not a path segment) so every route is a
 - `public/` — `manifest.json`, `icon.svg` (peeking-eyes favicon/PWA icon).
 
 ## 5. Game flow
-Home → Lobby → **Word reveal** (own-phone or pass-device; **hold-to-reveal** with a filling ring) → **Discussion** (optional timer, host ends it) → **Voting** (secret; self excluded) → **Vote reveal** (bar chart + who-voted-for-whom) → **Result** (crew vs. imposter; confetti on crew win) → **Scoreboard** (W/L/caught, medals) → **Play again** (same room/players, new round).
+Home → Lobby → **Word reveal** (own-phone or pass-device; **hold-to-reveal** with a filling ring) → **Discussion** (optional timer, host ends it; shows a random **speaking order**) → **Voting** (secret; self excluded) → **Vote reveal** (bar chart + who-voted-for-whom) → **Result** (crew vs. imposter; confetti on crew win) → **Scoreboard** (W/L/caught, medals) → **Play again** (same room/players, new round).
+
+- **Speaking order** (discussion screen): a random turn order — "X starts · Y ends" plus the numbered sequence. It's derived on-device from a hash of the shared per-round state (`word` + the imposter ids), so every device shows the **same** order with no stored column, and it changes each round because both the word and imposter assignment are re-randomized. Anyone can be first, including the imposter. See `startingOrder()` in `app/room/game/page.tsx`.
 
 - Crew sees the word; the imposter sees only the enabled clues.
 - **The word is always drawn at random in `startGame`** — the host plays too and can be the imposter, so they never pick or see the word. Resolved fresh each round (Play Again re-randomizes).
