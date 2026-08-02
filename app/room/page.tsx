@@ -100,6 +100,12 @@ function RoomPage() {
         .from("rooms").select().eq("code", code).single();
       if (!roomData) { setError("Room not found."); setLoading(false); return; }
 
+      // If this device isn't actually a player in this room (e.g. followed a
+      // shared link but has a stale id from a past game), send them to join.
+      const { data: mine } = await supabase
+        .from("players").select("id").eq("id", id).eq("room_id", roomData.id).maybeSingle();
+      if (!mine) { router.push(`/?join=${code}`); return; }
+
       setRoom(roomData);
       setImposterCount(roomData.imposter_count);
       setRevealMode(roomData.reveal_mode);
@@ -256,9 +262,18 @@ function RoomPage() {
     alert(copied ? "Code copied!" : code);
   }
 
+  function joinLink() {
+    // Point straight at the join screen (name prompt), not the lobby — so a
+    // visitor always gets to enter their name. Preserves origin + basePath.
+    const u = new URL(window.location.href);
+    u.pathname = u.pathname.replace(/room\/?$/, "");
+    u.search = `?join=${code}`;
+    u.hash = "";
+    return u.toString();
+  }
+
   async function shareRoom() {
-    // Current URL already includes origin, basePath and ?code= — robust for any host.
-    const url = window.location.href;
+    const url = joinLink();
     if (navigator.share) {
       navigator.share({ title: "Vidu Kadhu", text: `Join my game! Code: ${code}`, url });
     } else {

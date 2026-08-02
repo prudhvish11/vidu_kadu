@@ -3,10 +3,10 @@ import { supabase } from "@/lib/supabase";
 
 type PlayerLite = { id: string; is_host: boolean };
 
-// How long a player can be absent from presence before being removed. Generous
-// enough to tolerate page reloads, lobby->game navigation, and brief mobile
-// connection drops.
-const GRACE_MS = 8000;
+// How long a player can be absent from presence before being removed. Long
+// enough that locking a phone / backgrounding the tab (which drops the Realtime
+// socket) doesn't kick players — only genuine long-gone clients get cleaned up.
+const GRACE_MS = 60000;
 
 // Remove a player from a room: delete their votes and row, promote the
 // earliest-joined remaining player to host if the leaver was host, and tear the

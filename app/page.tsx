@@ -92,7 +92,7 @@ function Home() {
       <SoundToggle />
       <div className="screen vk-fade-up">
         <div style={{ textAlign: "center", marginBottom: "8px" }}>
-          <Logo className="vk-float" style={{ width: "clamp(88px, 24vw, 116px)", height: "auto", marginBottom: "10px" }} />
+          <Logo className="vk-float" style={{ display: "block", width: "clamp(88px, 24vw, 116px)", height: "auto", margin: "0 auto 10px" }} />
           <h1 style={{ fontSize: "clamp(34px, 9vw, 46px)", fontWeight: "800", letterSpacing: "-0.02em", background: "linear-gradient(120deg, var(--accent-dark), #E8368A)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
             Vidu Kadhu
           </h1>

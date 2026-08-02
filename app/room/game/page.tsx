@@ -252,10 +252,13 @@ function GamePage() {
   }
 
   async function castVote() {
-    if (!room || !myId || !selectedTarget) return;
+    if (!room || !myId || !selectedTarget || votingBusy) return;
     setVotingBusy(true);
     sfx.vote();
     await supabase.from("votes").insert({ room_id: room.id, voter_id: myId, target_id: selectedTarget });
+    // Always resync from the DB so the screen advances even if the Realtime echo
+    // is missed (and a duplicate/failed insert self-corrects instead of hanging).
+    await fetchVotes(room.id);
     setVotingBusy(false);
   }
 
