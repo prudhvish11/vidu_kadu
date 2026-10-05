@@ -35,6 +35,7 @@ type Room = {
   show_category: boolean;
   show_word_length: boolean;
   show_first_letter: boolean;
+  imposters_know?: boolean;
 };
 
 type WordRow = {
@@ -199,6 +200,13 @@ function GamePage() {
   const showCategory = room?.show_category ?? false;
   const showWordLength = room?.show_word_length ?? false;
   const showFirstLetter = room?.show_first_letter ?? false;
+  const impostersKnow = room?.imposters_know ?? false;
+  // Fellow imposters a given imposter should be shown (when the toggle is on and
+  // there are 2+). Excludes the viewer themselves.
+  const teammatesFor = (playerId: string) =>
+    impostersKnow
+      ? players.filter((p) => p.is_imposter && p.id !== playerId).map((p) => p.name)
+      : [];
 
   // Look up the word row (for the hint text, and its category_id so the category
   // clue works even when the room's category is random / null). Needed whenever
@@ -359,6 +367,7 @@ function GamePage() {
           showFirstLetter={showFirstLetter}
           word={room.word}
           wordRow={wordRow}
+          teammates={teammatesFor(currentPassPlayer.id)}
           revealed={revealed}
           onReveal={() => setRevealed(true)}
           onDone={() => { setRevealed(false); markRevealed(currentPassPlayer.id); }}
@@ -389,6 +398,7 @@ function GamePage() {
         showFirstLetter={showFirstLetter}
         word={room.word}
         wordRow={wordRow}
+        teammates={teammatesFor(me.id)}
         revealed={revealed}
         onReveal={() => setRevealed(true)}
         onDone={() => markRevealed(me.id)}
@@ -658,7 +668,7 @@ function getHint(wordRow: WordRow | null) {
 }
 
 function RevealCard({
-  isImposter, hintsEnabled, showCategory, categoryName, showWordLength, showFirstLetter, word, wordRow, revealed, onReveal, onDone, prompt,
+  isImposter, hintsEnabled, showCategory, categoryName, showWordLength, showFirstLetter, word, wordRow, teammates, revealed, onReveal, onDone, prompt,
 }: {
   isImposter: boolean;
   hintsEnabled: boolean;
@@ -668,6 +678,7 @@ function RevealCard({
   showFirstLetter: boolean;
   word: string | null;
   wordRow: WordRow | null;
+  teammates: string[];
   revealed: boolean;
   onReveal: () => void;
   onDone: () => void;
@@ -741,6 +752,12 @@ function RevealCard({
                 {!anyClue && (
                   <p style={{ fontSize: "14px", color: "#C99" }}>No clues — blend in and don&apos;t get caught.</p>
                 )}
+                {teammates.length > 0 && (
+                  <div style={{ marginTop: "6px", paddingTop: "12px", borderTop: "0.5px solid #5A1A1A", display: "flex", flexDirection: "column", gap: "2px" }}>
+                    <p style={{ fontSize: "11px", color: "#C99", textTransform: "uppercase", letterSpacing: "0.08em" }}>🤝 {teammates.length > 1 ? "Your fellow imposters" : "Your fellow imposter"}</p>
+                    <p style={{ fontSize: "18px", fontWeight: "700", color: "#FFB3B3" }}>{teammates.join(", ")}</p>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="card" style={{ padding: "28px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -757,7 +774,7 @@ function RevealCard({
 }
 
 function OwnRevealScreen({
-  me, hintsEnabled, showCategory, categoryName, showWordLength, showFirstLetter, word, wordRow, revealed, onReveal, onDone,
+  me, hintsEnabled, showCategory, categoryName, showWordLength, showFirstLetter, word, wordRow, teammates, revealed, onReveal, onDone,
 }: {
   me: Player;
   hintsEnabled: boolean;
@@ -767,6 +784,7 @@ function OwnRevealScreen({
   showFirstLetter: boolean;
   word: string | null;
   wordRow: WordRow | null;
+  teammates: string[];
   revealed: boolean;
   onReveal: () => void;
   onDone: () => void;
@@ -781,6 +799,7 @@ function OwnRevealScreen({
       showFirstLetter={showFirstLetter}
       word={word}
       wordRow={wordRow}
+      teammates={teammates}
       revealed={revealed}
       onReveal={onReveal}
       onDone={onDone}
@@ -790,7 +809,7 @@ function OwnRevealScreen({
 }
 
 function PassRevealScreen({
-  player, hintsEnabled, showCategory, categoryName, showWordLength, showFirstLetter, word, wordRow, revealed, onReveal, onDone,
+  player, hintsEnabled, showCategory, categoryName, showWordLength, showFirstLetter, word, wordRow, teammates, revealed, onReveal, onDone,
 }: {
   player: Player;
   hintsEnabled: boolean;
@@ -800,6 +819,7 @@ function PassRevealScreen({
   showFirstLetter: boolean;
   word: string | null;
   wordRow: WordRow | null;
+  teammates: string[];
   revealed: boolean;
   onReveal: () => void;
   onDone: () => void;
@@ -827,6 +847,7 @@ function PassRevealScreen({
       showFirstLetter={showFirstLetter}
       word={word}
       wordRow={wordRow}
+      teammates={teammates}
       revealed={revealed}
       onReveal={onReveal}
       onDone={onDone}

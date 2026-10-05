@@ -37,6 +37,7 @@ type Room = {
   show_category: boolean;
   show_word_length: boolean;
   show_first_letter: boolean;
+  imposters_know?: boolean; // optional: column may not be migrated yet
 };
 
 type Category = { id: string; name: string };
@@ -63,6 +64,7 @@ function RoomPage() {
   const [showCategory, setShowCategory] = useState(false);
   const [showWordLength, setShowWordLength] = useState(false);
   const [showFirstLetter, setShowFirstLetter] = useState(false);
+  const [impostersKnow, setImpostersKnow] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [startError, setStartError] = useState("");
   const [joinUrl, setJoinUrl] = useState(""); // the scan/share link; set client-side (needs window)
@@ -89,6 +91,7 @@ function RoomPage() {
       setShowCategory(data.show_category ?? false);
       setShowWordLength(data.show_word_length ?? false);
       setShowFirstLetter(data.show_first_letter ?? false);
+      setImpostersKnow(data.imposters_know ?? false);
       // Category selection is initialized once by the effect below (needs the
       // categories list too), so it isn't overwritten on every room update.
     }
@@ -121,6 +124,7 @@ function RoomPage() {
       setShowCategory(roomData.show_category ?? false);
       setShowWordLength(roomData.show_word_length ?? false);
       setShowFirstLetter(roomData.show_first_letter ?? false);
+      setImpostersKnow(roomData.imposters_know ?? false);
 
       await fetchPlayers(roomData.id);
 
@@ -239,8 +243,16 @@ function RoomPage() {
         if (e3) await supabase.from("rooms").update(base).eq("id", room.id);
       }
     }
+    // Best-effort, decoupled so a not-yet-migrated column can't drop the rest.
+    await supabase.from("rooms").update({ imposters_know: impostersKnow }).eq("id", room.id);
     setSavingSettings(false);
     setShowSettings(false);
+  }
+
+  async function kickPlayer(p: Player) {
+    if (!room || p.id === myId) return;
+    if (!window.confirm(`Remove ${p.name} from the room?`)) return;
+    await removePlayerFromRoom(room.id, p.id, players);
   }
 
   async function startGame() {
@@ -435,6 +447,12 @@ function RoomPage() {
                 {p.id === myId && (
                   <span style={{ fontSize: "10px", color: "var(--t3)" }}>you</span>
                 )}
+                {isHost && p.id !== myId && (
+                  <button onClick={() => { sfx.tap(); kickPlayer(p); }} title={`Remove ${p.name}`}
+                    style={{ fontSize: "13px", color: "var(--t3)", background: "none", border: "none", cursor: "pointer", padding: "2px 4px", lineHeight: 1 }}>
+                    ✕
+                  </button>
+                )}
               </div>
             </div>
             );
@@ -580,6 +598,11 @@ function RoomPage() {
                   </button>
                 ))}
               </div>
+              {imposterCount >= 2 && (
+                <div style={{ marginTop: "10px" }}>
+                  <SettingToggle label="Imposters know each other" desc="Teammates see who the other imposter(s) are" on={impostersKnow} onToggle={() => setImpostersKnow(!impostersKnow)} />
+                </div>
+              )}
             </div>
 
             <div>

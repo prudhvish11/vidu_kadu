@@ -6,6 +6,7 @@ import { sfx } from "@/lib/sound";
 import SoundToggle from "@/components/SoundToggle";
 import Logo from "@/components/Logo";
 import HowToPlay from "@/components/HowToPlay";
+import InstallHint from "@/components/InstallHint";
 import { generateId } from "@/lib/id";
 
 function generateCode() {
@@ -107,6 +108,7 @@ function Home() {
             <div style={{ textAlign: "center", marginTop: "4px" }}>
               <HowToPlay />
             </div>
+            <InstallHint />
           </div>
         )}
 
