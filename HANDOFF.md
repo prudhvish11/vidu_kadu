@@ -83,7 +83,8 @@ Mango-Fizz light palette, drifting **aurora** backdrop, **Apple Liquid Glass** c
 ---
 
 ## 9. Supabase schema (current)
-- **`rooms`**: `id, code, host_id, status ('lobby'|'playing'|'voting'|'reveal'), word, category_id (legacy single, may be null), category_ids (jsonb — selected category pool; [] = all), imposter_count, reveal_mode ('own'|'pass'), timer_enabled, timer_seconds, hints_enabled, show_category, show_word_length, show_first_letter, created_at`
+- **`rooms`**: `id, code, host_id, status ('lobby'|'playing'|'voting'|'reveal'), word, category_id (legacy single, may be null), category_ids (jsonb — selected category pool; [] = all), imposter_count, reveal_mode ('own'|'pass'), timer_enabled, timer_seconds, hints_enabled, show_category, show_word_length, show_first_letter, imposters_know, created_at`
+  - `imposters_know` (boolean, default false) — with 2+ imposters, show each imposter their teammates on the reveal card. **Migration:** `alter table rooms add column if not exists imposters_know boolean not null default false;` The app degrades gracefully (toggle just won't persist) until this runs.
 - **`players`**: `id, room_id, name, is_host, is_imposter, is_eliminated, has_revealed, wins, losses, times_caught, joined_at`
 - **`votes`**: `id, room_id, voter_id, target_id`
 - **`categories`**: `id, name`
