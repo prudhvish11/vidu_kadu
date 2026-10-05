@@ -3,6 +3,7 @@ import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useRoomPresence, removePlayerFromRoom } from "@/lib/presence";
+import { generateId } from "@/lib/id";
 import { avatarColor } from "@/lib/avatar";
 import { sfx } from "@/lib/sound";
 import SoundToggle from "@/components/SoundToggle";
@@ -69,6 +70,8 @@ function RoomPage() {
   const [startError, setStartError] = useState("");
   const [joinUrl, setJoinUrl] = useState(""); // the scan/share link; set client-side (needs window)
   const [showQR, setShowQR] = useState(true);
+  const [newPlayerName, setNewPlayerName] = useState("");
+  const [addingPlayer, setAddingPlayer] = useState(false);
 
   const fetchPlayers = useCallback(async (roomId: string) => {
     const { data } = await supabase
@@ -182,7 +185,9 @@ function RoomPage() {
   }, [room?.id, fetchPlayers, fetchRoom, code, router]);
 
   // Track live connections; auto-removes players who disconnect.
-  const onlineIds = useRoomPresence(room?.id ?? null, myId, players);
+  // In pass-device mode players share one phone (and the host may add players
+  // who have no device at all), so nobody is "online" — don't auto-reap.
+  const onlineIds = useRoomPresence(room?.id ?? null, myId, players, revealMode !== "pass");
 
   async function leaveRoom() {
     try { localStorage.removeItem("vk_last_room"); } catch { /* ignore */ }
@@ -254,6 +259,18 @@ function RoomPage() {
     if (!room || p.id === myId) return;
     if (!window.confirm(`Remove ${p.name} from the room?`)) return;
     await removePlayerFromRoom(room.id, p.id, players);
+  }
+
+  // Pass-device: host adds players who share the one phone (no device of their
+  // own). They get a row but no localStorage identity anywhere.
+  async function addPlayer() {
+    const name = newPlayerName.trim();
+    if (!room || !name || addingPlayer || players.length >= 15) return;
+    setAddingPlayer(true);
+    await supabase.from("players").insert({ id: generateId(), room_id: room.id, name, is_host: false });
+    await fetchPlayers(room.id);
+    setNewPlayerName("");
+    setAddingPlayer(false);
   }
 
   async function startGame() {
@@ -458,6 +475,19 @@ function RoomPage() {
             </div>
             );
           })}
+
+          {isHost && revealMode === "pass" && players.length < 15 && (
+            <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+              <input className="input" placeholder="Add a player (pass-device)" value={newPlayerName}
+                onChange={e => setNewPlayerName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && addPlayer()}
+                maxLength={20} style={{ flex: 1 }} />
+              <button className="btn-outline" onClick={() => { sfx.tap(); addPlayer(); }} disabled={!newPlayerName.trim() || addingPlayer}
+                style={{ width: "auto", padding: "0 18px" }}>
+                {addingPlayer ? "..." : "Add"}
+              </button>
+            </div>
+          )}
 
           {players.length < 3 && (
             <p style={{ fontSize: "11px", color: "var(--t3)", marginTop: "10px", fontStyle: "italic" }}>

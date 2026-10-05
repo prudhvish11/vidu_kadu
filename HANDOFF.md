@@ -67,6 +67,8 @@ Home → Lobby → **Word reveal** (own-phone or pass-device; **hold-to-reveal**
   | First letter | `show_first_letter` (false) | derived from `word` |
   With all off, the imposter card says "No clues — blend in and don't get caught."
 - **Number of imposters** (1–3) · **Reveal mode** (own phone / pass device) · **Discussion timer** (off / 60–300s).
+- **Imposters know each other** (`imposters_know`, shown at 2+ imposters): each imposter's reveal card lists their teammates.
+- **Pass-device mode** is a true single-phone flow: the host can **add players** (deviceless rows) from the lobby, reveal passes the phone per player, and **voting** passes too (`PassVoteScreen` records each player's ballot in turn). Lobby auto-reaping is disabled in pass mode (nobody is "online"); the host manages the roster with the ✕ kick button.
 - The **Save** button is a sticky footer (always visible above the scrolling list).
 
 The imposter's Category clue is derived from the chosen word's own category (`words.category_id` → `categories.name`), so it's correct even when the category pool was random.

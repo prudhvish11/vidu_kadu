@@ -359,6 +359,17 @@ function GamePage() {
     setVotingBusy(false);
   }
 
+  // Pass-device voting: the single shared phone records each player's vote in
+  // turn (voter_id is the player being passed to, not the device owner).
+  async function castVoteFor(voterId: string, targetId: string) {
+    if (!room || votingBusy) return;
+    setVotingBusy(true);
+    sfx.vote();
+    await supabase.from("votes").insert({ room_id: room.id, voter_id: voterId, target_id: targetId });
+    await fetchVotes(room.id);
+    setVotingBusy(false);
+  }
+
   async function playAgain() {
     if (!room) return;
     setPlayAgainBusy(true);
@@ -502,6 +513,36 @@ function GamePage() {
 
   // ---- Phase: voting ----
   if (room.status === "voting") {
+    // Pass-device: one shared phone collects everyone's vote in turn.
+    if (room.reveal_mode === "pass") {
+      const nextVoter = players.find((p) => !votes.some((v) => v.voter_id === p.id));
+      if (nextVoter) {
+        return (
+          <PassVoteScreen
+            key={nextVoter.id}
+            voter={nextVoter}
+            candidates={players.filter((p) => p.id !== nextVoter.id && !p.is_eliminated)}
+            isRunoff={isRunoff}
+            busy={votingBusy}
+            onCast={(targetId) => castVoteFor(nextVoter.id, targetId)}
+            onLeave={leaveRoom}
+          />
+        );
+      }
+      // Everyone has voted — host tallies (auto-advance effect), others wait.
+      return (
+        <WaitingScreen
+          title="All votes are in"
+          subtitle={`${votes.length}/${players.length} voted`}
+          onLeave={leaveRoom}
+          action={isHost ? (
+            <button className="btn-primary" onClick={() => { sfx.tap(); advanceToReveal(); }}>
+              Reveal results →
+            </button>
+          ) : undefined}
+        />
+      );
+    }
     const myVote = votes.find((v) => v.voter_id === myId);
     if (myVote) {
       const target = players.find((p) => p.id === myVote.target_id);
@@ -871,6 +912,68 @@ function OwnRevealScreen({
       onDone={onDone}
       prompt="Take a look, then hide it before you show your neighbor."
     />
+  );
+}
+
+function PassVoteScreen({
+  voter, candidates, isRunoff, busy, onCast, onLeave,
+}: {
+  voter: Player;
+  candidates: Player[];
+  isRunoff: boolean;
+  busy: boolean;
+  onCast: (targetId: string) => void;
+  onLeave: () => void;
+}) {
+  const [ready, setReady] = useState(false);
+  const [sel, setSel] = useState("");
+
+  if (!ready) {
+    return (
+      <div className="page">
+        <LeaveButton onLeave={onLeave} />
+        <SoundToggle />
+        <div className="screen vk-phase" style={{ textAlign: "center", gap: "16px" }}>
+          <div className="vk-float" style={{ fontSize: "44px" }}>📱</div>
+          <h2 style={{ fontSize: "20px", fontWeight: "700", color: "var(--t1)" }}>Pass the phone to</h2>
+          <p style={{ fontSize: "28px", fontWeight: "800", color: "var(--accent-dark)" }}>{voter.name}</p>
+          {isRunoff && <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--accent-dark)" }}>⚖️ Tie-breaker — vote between the top picks</p>}
+          <button className="btn-primary" onClick={() => { sfx.tap(); setReady(true); }}>I&apos;m {voter.name}, let me vote</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="page" style={{ justifyContent: "flex-start", paddingTop: "clamp(24px, 6vh, 48px)" }}>
+      <LeaveButton onLeave={onLeave} />
+      <SoundToggle />
+      <div className="screen vk-phase">
+        <div style={{ textAlign: "center", marginBottom: "4px" }}>
+          <div style={{ fontSize: "36px" }}>🗳️</div>
+          <h2 style={{ fontSize: "19px", fontWeight: "700", color: "var(--t1)" }}>{voter.name}, who&apos;s the imposter?</h2>
+          {isRunoff && <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--accent-dark)", marginTop: "4px" }}>⚖️ It&apos;s a tie — pick between the top picks</p>}
+        </div>
+        <div className="card" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {candidates.map((p) => {
+            const s = sel === p.id;
+            return (
+              <button key={p.id} onClick={() => { sfx.tap(); setSel(p.id); }}
+                style={{ display: "flex", alignItems: "center", gap: "10px", textAlign: "left", padding: "10px 12px", borderRadius: "12px", cursor: "pointer",
+                  border: `1px solid ${s ? "var(--accent)" : "var(--border2)"}`,
+                  background: s ? "rgba(255,122,0,0.16)" : "rgba(255,255,255,0.5)",
+                  color: "var(--t1)", fontSize: "14px" }}>
+                <span className="avatar" style={{ width: "28px", height: "28px", fontSize: "12px", background: avatarColor(p.name) }}>{p.name[0].toUpperCase()}</span>
+                <span style={{ flex: 1 }}>{p.name}</span>
+                {s && <span style={{ color: "var(--accent)", fontSize: "16px" }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+        <button className="btn-primary" onClick={() => onCast(sel)} disabled={!sel || busy}>
+          {busy ? "Saving..." : "Lock in vote"}
+        </button>
+      </div>
+    </div>
   );
 }
 
