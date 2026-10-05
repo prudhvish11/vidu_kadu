@@ -36,21 +36,29 @@ export async function removePlayerFromRoom(
   }
 }
 
-// Tracks who is actually connected via Supabase Realtime presence and removes
-// players who disconnect. To avoid every client deleting at once, a single
-// "leader" performs removals: the host if it is online, otherwise the online
-// player with the lowest id. Since the leader is always chosen among online
-// players, a disconnected host is cleaned up (and replaced) by another client.
+// Tracks who is actually connected via Supabase Realtime presence and (when
+// `allowRemoval` is true) removes players who disconnect. To avoid every client
+// deleting at once, a single "leader" performs removals: the host if it is
+// online, otherwise the online player with the lowest id.
+//
+// Removal is only safe in the LOBBY. Once a game is in progress, pass `false`:
+// a phone that locks drops its Realtime socket (iOS suspends it), and in
+// pass-device mode everyone but the phone-holder is offline the whole round —
+// removing them would wipe players mid-game. Returned `onlineIds` still updates
+// regardless, so callers can show live-connection UI.
 export function useRoomPresence(
   roomId: string | null,
   myId: string | null,
   players: PlayerLite[],
+  allowRemoval: boolean = true,
 ): Set<string> {
   const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set());
   const playersRef = useRef<PlayerLite[]>(players);
   playersRef.current = players;
   const onlineRef = useRef<Set<string>>(new Set());
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const allowRemovalRef = useRef(allowRemoval);
+  allowRemovalRef.current = allowRemoval;
 
   useEffect(() => {
     if (!roomId || !myId) return;
@@ -67,6 +75,7 @@ export function useRoomPresence(
       for (const [pid, t] of timersRef.current) {
         if (online.has(pid)) { clearTimeout(t); timersRef.current.delete(pid); }
       }
+      if (!allowRemovalRef.current) return; // in-game: track presence, never remove
       if (leaderId(online) !== myId) return;
       for (const p of playersRef.current) {
         if (online.has(p.id) || timersRef.current.has(p.id)) continue;

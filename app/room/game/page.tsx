@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useRoomPresence, removePlayerFromRoom } from "@/lib/presence";
@@ -239,8 +239,10 @@ function GamePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room?.status]);
 
-  // Track live connections; auto-removes players who disconnect mid-game.
-  useRoomPresence(room?.id ?? null, myId, players);
+  // Track live connections, but NEVER auto-remove mid-game: a locked phone
+  // drops its socket, and in pass-device mode everyone but the phone-holder is
+  // offline the whole round. Players only leave in-game via the Leave button.
+  useRoomPresence(room?.id ?? null, myId, players, false);
 
   async function leaveRoom() {
     if (myId && room) await removePlayerFromRoom(room.id, myId, players);
@@ -261,31 +263,41 @@ function GamePage() {
     return () => clearInterval(iv);
   }, [room?.status, allRevealed, room?.timer_enabled, room?.timer_seconds, room]);
 
-  // Auto-advance to reveal once everyone has voted. Scoring is applied here,
-  // during the one-time voting -> reveal transition, so a host reload while in
-  // the reveal phase never re-applies scores. supabase-js query builders are
-  // lazy — each call must be awaited to actually execute.
+  // Tally votes, apply scores, and move to the reveal phase. Guarded by a ref so
+  // it runs exactly once per round (a host reload in reveal never re-scores).
+  // supabase-js query builders are lazy — each call must be awaited to run.
+  const advanceToReveal = useCallback(async () => {
+    if (!room || votingAdvancedRef.current) return;
+    votingAdvancedRef.current = true;
+    const { crewWins } = computeResult(players, votes);
+    for (const p of players) {
+      const patch = p.is_imposter
+        ? { wins: crewWins ? p.wins : p.wins + 1, losses: crewWins ? p.losses + 1 : p.losses, times_caught: crewWins ? p.times_caught + 1 : p.times_caught }
+        : { wins: crewWins ? p.wins + 1 : p.wins, losses: crewWins ? p.losses : p.losses + 1 };
+      await supabase.from("players").update(patch).eq("id", p.id);
+    }
+    const { error } = await supabase.from("rooms").update({ status: "reveal" }).eq("id", room.id);
+    if (error) votingAdvancedRef.current = false;
+  }, [room, players, votes]);
+
+  // Auto-advance to reveal once everyone still in the room has voted. The host
+  // can also force it from the waiting screen if someone is absent (see below).
   useEffect(() => {
     if (!room || room.status !== "voting" || !isHost) return;
-    if (votingAdvancedRef.current) return;
     if (players.length === 0 || votes.length < players.length) return;
-    votingAdvancedRef.current = true;
-
-    (async () => {
-      const { crewWins } = computeResult(players, votes);
-      for (const p of players) {
-        const patch = p.is_imposter
-          ? { wins: crewWins ? p.wins : p.wins + 1, losses: crewWins ? p.losses + 1 : p.losses, times_caught: crewWins ? p.times_caught + 1 : p.times_caught }
-          : { wins: crewWins ? p.wins + 1 : p.wins, losses: crewWins ? p.losses : p.losses + 1 };
-        await supabase.from("players").update(patch).eq("id", p.id);
-      }
-      const { error } = await supabase.from("rooms").update({ status: "reveal" }).eq("id", room.id);
-      if (error) votingAdvancedRef.current = false;
-    })();
-  }, [room, isHost, players, votes]);
+    advanceToReveal();
+  }, [room, isHost, players, votes, advanceToReveal]);
 
   async function markRevealed(playerId: string) {
     await supabase.from("players").update({ has_revealed: true }).eq("id", playerId);
+  }
+
+  // Host override: mark everyone who hasn't looked as revealed, so the round can
+  // move to discussion even if an absent player never opened their card.
+  async function skipRemainingReveals() {
+    for (const p of players.filter((x) => !x.has_revealed)) {
+      await supabase.from("players").update({ has_revealed: true }).eq("id", p.id);
+    }
   }
 
   async function startVoting() {
@@ -359,7 +371,12 @@ function GamePage() {
       const pending = players.filter((p) => !p.has_revealed).map((p) => p.name);
       return (
         <WaitingScreen title="Word revealed!" subtitle={`${doneCount}/${players.length} have looked`}
-          pendingLabel="Still looking:" pending={pending} onLeave={leaveRoom} />
+          pendingLabel="Still looking:" pending={pending} onLeave={leaveRoom}
+          action={isHost && pending.length > 0 ? (
+            <button className="btn-outline" onClick={() => { sfx.tap(); skipRemainingReveals(); }}>
+              Continue without them →
+            </button>
+          ) : undefined} />
       );
     }
     return (
@@ -449,6 +466,11 @@ function GamePage() {
           pendingLabel="Yet to vote:"
           pending={pending}
           onLeave={leaveRoom}
+          action={isHost && pending.length > 0 ? (
+            <button className="btn-outline" onClick={() => { sfx.tap(); advanceToReveal(); }}>
+              Reveal results now →
+            </button>
+          ) : undefined}
         />
       );
     }
@@ -598,8 +620,8 @@ function LeaveButton({ onLeave }: { onLeave: () => void }) {
   );
 }
 
-function WaitingScreen({ title, subtitle, pending, pendingLabel, onLeave }: {
-  title: string; subtitle: string; pending?: string[]; pendingLabel?: string; onLeave?: () => void;
+function WaitingScreen({ title, subtitle, pending, pendingLabel, onLeave, action }: {
+  title: string; subtitle: string; pending?: string[]; pendingLabel?: string; onLeave?: () => void; action?: ReactNode;
 }) {
   return (
     <div className="page">
@@ -621,6 +643,7 @@ function WaitingScreen({ title, subtitle, pending, pendingLabel, onLeave }: {
             </div>
           </div>
         )}
+        {action && <div style={{ marginTop: "8px", width: "100%", maxWidth: "320px" }}>{action}</div>}
         <div className="spinner" style={{ marginTop: "4px" }} />
       </div>
     </div>
