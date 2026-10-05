@@ -6,6 +6,8 @@ import { useRoomPresence, removePlayerFromRoom } from "@/lib/presence";
 import { avatarColor } from "@/lib/avatar";
 import { sfx } from "@/lib/sound";
 import SoundToggle from "@/components/SoundToggle";
+import HowToPlay from "@/components/HowToPlay";
+import QRCode from "@/components/QRCode";
 
 type Player = {
   id: string;
@@ -63,6 +65,8 @@ function RoomPage() {
   const [showFirstLetter, setShowFirstLetter] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [startError, setStartError] = useState("");
+  const [joinUrl, setJoinUrl] = useState(""); // the scan/share link; set client-side (needs window)
+  const [showQR, setShowQR] = useState(true);
 
   const fetchPlayers = useCallback(async (roomId: string) => {
     const { data } = await supabase
@@ -305,6 +309,13 @@ function RoomPage() {
     return u.toString();
   }
 
+  // Compute the join link on the client (joinLink needs window; skipped during
+  // the static prerender, which only ever shows the loading state).
+  useEffect(() => {
+    if (code) setJoinUrl(joinLink());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
   async function shareRoom() {
     const url = joinLink();
     if (navigator.share) {
@@ -349,10 +360,13 @@ function RoomPage() {
               {isHost ? "You are the host" : `Hosted by ${players.find(p => p.is_host)?.name || "..."}`}
             </p>
           </div>
-          <button onClick={leaveRoom}
-            style={{ fontSize: "12px", color: "var(--t2)", background: "none", border: "none", cursor: "pointer" }}>
-            Leave
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+            <HowToPlay />
+            <button onClick={leaveRoom}
+              style={{ fontSize: "12px", color: "var(--t2)", background: "none", border: "none", cursor: "pointer" }}>
+              Leave
+            </button>
+          </div>
         </div>
 
         {/* Room code — ticket style */}
@@ -375,6 +389,17 @@ function RoomPage() {
             </button>
           </div>
         </div>
+
+        {/* QR code — scan to join, no code typing */}
+        {joinUrl && (
+          <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: showQR ? "18px" : "12px 18px" }}>
+            {showQR && <QRCode value={joinUrl} size={168} />}
+            <button onClick={() => { sfx.tap(); setShowQR(v => !v); }}
+              style={{ fontSize: "12px", fontWeight: 600, color: "var(--accent-dark)", background: "none", border: "none", cursor: "pointer" }}>
+              {showQR ? "📷 Scan to join — tap to hide" : "📷 Show QR to join"}
+            </button>
+          </div>
+        )}
 
         {/* Players list */}
         <div className="card">

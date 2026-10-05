@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { sfx } from "@/lib/sound";
 import SoundToggle from "@/components/SoundToggle";
 import Logo from "@/components/Logo";
+import HowToPlay from "@/components/HowToPlay";
 import { generateId } from "@/lib/id";
 
 function generateCode() {
@@ -103,6 +104,9 @@ function Home() {
           <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "16px" }}>
             <button className="btn-primary" onClick={() => { sfx.tap(); setMode("create"); }}>Create Room</button>
             <button className="btn-outline" onClick={() => { sfx.tap(); setMode("join"); }}>Join Room</button>
+            <div style={{ textAlign: "center", marginTop: "4px" }}>
+              <HowToPlay />
+            </div>
           </div>
         )}
 
