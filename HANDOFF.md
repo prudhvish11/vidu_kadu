@@ -92,6 +92,8 @@ Mango-Fizz light palette, drifting **aurora** backdrop, **Apple Liquid Glass** c
 
 Realtime is enabled for `rooms`, `players`, `votes`.
 
+**Row Level Security:** see `supabase/rls.sql` — turns RLS on everywhere (content tables read-only to the public anon key; game tables fully usable by the client). The app has no auth, so it can't stop cross-room tampering (needs auth/RPC), but it protects the word lists and clears the "RLS disabled" warning. Run it in the SQL Editor and smoke-test a game.
+
 ---
 
 ## 10. How to add categories & words (data)
