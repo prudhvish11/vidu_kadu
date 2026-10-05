@@ -110,6 +110,10 @@ function GamePage() {
   const [playAgainBusy, setPlayAgainBusy] = useState(false);
 
   const votingAdvancedRef = useRef(false);
+  // After a runoff starts we must wait for the round-1 votes to actually clear
+  // before accepting the next completion, otherwise an is_eliminated realtime
+  // update that lands before the vote-delete makes "all voted" look true again.
+  const awaitingRunoffClearRef = useRef(false);
 
   const fetchRoom = useCallback(async () => {
     const { data } = await supabase.from("rooms").select().eq("code", code).single();
@@ -236,7 +240,7 @@ function GamePage() {
   }, [room?.status]);
 
   useEffect(() => {
-    if (room?.status !== "voting") votingAdvancedRef.current = false;
+    if (room?.status !== "voting") { votingAdvancedRef.current = false; awaitingRunoffClearRef.current = false; }
   }, [room?.status]);
 
   // Win/lose sting when the reveal screen appears.
@@ -273,12 +277,36 @@ function GamePage() {
     return () => clearInterval(iv);
   }, [room?.status, allRevealed, room?.timer_enabled, room?.timer_seconds, room]);
 
-  // Tally votes, apply scores, and move to the reveal phase. Guarded by a ref so
-  // it runs exactly once per round (a host reload in reveal never re-scores).
-  // supabase-js query builders are lazy — each call must be awaited to run.
+  // A tie-breaker runoff is in progress when some players have been marked out
+  // of contention (is_eliminated) but the game is still voting.
+  const isRunoff = players.some((p) => p.is_eliminated);
+
+  // Tally votes and either (a) trigger a one-time runoff between the tied top
+  // candidates, or (b) apply scores and move to reveal. Guarded by a ref so it
+  // runs once per voting round. supabase-js builders are lazy — always await.
   const advanceToReveal = useCallback(async () => {
     if (!room || votingAdvancedRef.current) return;
     votingAdvancedRef.current = true;
+
+    // Who's tied at the top of this round's votes?
+    const counts = new Map<string, number>();
+    for (const v of votes) counts.set(v.target_id, (counts.get(v.target_id) || 0) + 1);
+    const max = Math.max(0, ...players.map((p) => counts.get(p.id) || 0));
+    const tiedIds = players.filter((p) => (counts.get(p.id) || 0) === max && max > 0).map((p) => p.id);
+    const alreadyRunoff = players.some((p) => p.is_eliminated);
+
+    // First tie → run a single runoff between the tied players. A second tie
+    // (in the runoff) falls through to reveal, where ties favor the imposter.
+    if (tiedIds.length > 1 && !alreadyRunoff) {
+      awaitingRunoffClearRef.current = true; // gate the effect until votes clear
+      for (const p of players) {
+        await supabase.from("players").update({ is_eliminated: !tiedIds.includes(p.id) }).eq("id", p.id);
+      }
+      await supabase.from("votes").delete().eq("room_id", room.id);
+      votingAdvancedRef.current = false; // let the runoff round advance when it completes
+      return;
+    }
+
     const { crewWins } = computeResult(players, votes);
     for (const p of players) {
       const patch = p.is_imposter
@@ -294,6 +322,11 @@ function GamePage() {
   // can also force it from the waiting screen if someone is absent (see below).
   useEffect(() => {
     if (!room || room.status !== "voting" || !isHost) return;
+    // Wait for the round-1 votes to actually clear after a runoff starts.
+    if (awaitingRunoffClearRef.current) {
+      if (votes.length === 0) awaitingRunoffClearRef.current = false;
+      return;
+    }
     if (players.length === 0 || votes.length < players.length) return;
     advanceToReveal();
   }, [room, isHost, players, votes, advanceToReveal]);
@@ -497,6 +530,11 @@ function GamePage() {
           <div style={{ textAlign: "center", marginBottom: "4px" }}>
             <div style={{ fontSize: "36px" }}>🗳️</div>
             <h2 style={{ fontSize: "20px", fontWeight: "700", color: "var(--t1)" }}>Who&apos;s the imposter?</h2>
+            {isRunoff && (
+              <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--accent-dark)", marginTop: "4px" }}>
+                ⚖️ It&apos;s a tie — vote again between the top picks
+              </p>
+            )}
           </div>
           <div className="card" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {candidates.map((p) => {
