@@ -185,6 +185,7 @@ function RoomPage() {
   const onlineIds = useRoomPresence(room?.id ?? null, myId, players);
 
   async function leaveRoom() {
+    try { localStorage.removeItem("vk_last_room"); } catch { /* ignore */ }
     if (myId && room) await removePlayerFromRoom(room.id, myId, players);
     router.push("/");
   }

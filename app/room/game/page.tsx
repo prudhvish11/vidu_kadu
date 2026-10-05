@@ -7,6 +7,7 @@ import { avatarColor } from "@/lib/avatar";
 import { sfx } from "@/lib/sound";
 import SoundToggle from "@/components/SoundToggle";
 import Confetti from "@/components/Confetti";
+import Reactions from "@/components/Reactions";
 
 type Player = {
   id: string;
@@ -253,6 +254,7 @@ function GamePage() {
   useRoomPresence(room?.id ?? null, myId, players, false);
 
   async function leaveRoom() {
+    try { localStorage.removeItem("vk_last_room"); } catch { /* ignore */ }
     if (myId && room) await removePlayerFromRoom(room.id, myId, players);
     router.push("/");
   }
@@ -453,6 +455,8 @@ function GamePage() {
               {mm}:{ss}
             </div>
           )}
+
+          <Reactions roomId={room.id} />
           {isHost ? (
             <button className="btn-primary" onClick={() => { sfx.tap(); startVoting(); }}>Start Voting →</button>
           ) : (
@@ -515,6 +519,7 @@ function GamePage() {
           <button className="btn-primary" onClick={castVote} disabled={!selectedTarget || votingBusy}>
             {votingBusy ? "Casting vote..." : "Cast Vote"}
           </button>
+          <Reactions roomId={room.id} />
         </div>
       </div>
     );
@@ -528,6 +533,16 @@ function GamePage() {
     const imposters = players.filter((p) => p.is_imposter);
     const maxVotes = Math.max(1, ...players.map((p) => votes.filter((v) => v.target_id === p.id).length));
     const sorted = [...players].sort((a, b) => b.wins - a.wins);
+    // End-of-round awards, derived from cumulative stats (no extra data needed).
+    const gamesPlayed = players.some((p) => p.wins + p.losses > 0);
+    const topWinner = gamesPlayed ? [...players].sort((a, b) => b.wins - a.wins)[0] : null;
+    const topCaught = players.reduce<Player | null>((m, p) => (p.times_caught > (m?.times_caught ?? 0) ? p : m), null);
+    const awards = gamesPlayed
+      ? [
+          topWinner && topWinner.wins > 0 ? { icon: "🥇", label: "Most wins", name: topWinner.name } : null,
+          topCaught && topCaught.times_caught > 0 ? { icon: "🎯", label: "Most caught", name: topCaught.name } : null,
+        ].filter(Boolean) as { icon: string; label: string; name: string }[]
+      : [];
     const medals = ["🥇", "🥈", "🥉"];
     return (
       <div className="page" style={{ justifyContent: "flex-start", paddingTop: "clamp(20px, 4vh, 36px)" }}>
@@ -575,6 +590,18 @@ function GamePage() {
             })}
           </div>
 
+          {awards.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center" }}>
+              {awards.map((a) => (
+                <div key={a.label} style={{ display: "flex", alignItems: "center", gap: "7px", padding: "6px 12px", borderRadius: "999px", background: "var(--bg2)", border: "1px solid var(--border2)" }}>
+                  <span style={{ fontSize: "16px" }}>{a.icon}</span>
+                  <span style={{ fontSize: "12px", color: "var(--t3)" }}>{a.label}</span>
+                  <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--t1)" }}>{a.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0" }}>
             <div style={{ display: "flex", fontSize: "10px", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 0 8px", borderBottom: "0.5px solid var(--border)" }}>
               <span style={{ flex: 1 }}>🏆 Scoreboard</span>
@@ -601,6 +628,7 @@ function GamePage() {
           ) : (
             <p style={{ fontSize: "12px", color: "var(--t3)", textAlign: "center" }}>Waiting for host to start the next round...</p>
           )}
+          <Reactions roomId={room.id} />
         </div>
       </div>
     );

@@ -1,5 +1,5 @@
 "use client";
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { sfx } from "@/lib/sound";
@@ -22,6 +22,15 @@ function Home() {
   const [mode, setMode] = useState<"home" | "create" | "join">(prefillCode ? "join" : "home");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [rejoinCode, setRejoinCode] = useState(""); // a room this device was in
+
+  useEffect(() => {
+    // Offer a one-tap rejoin if this device has an identity and a remembered
+    // room (set on create/join, cleared on Leave).
+    const last = localStorage.getItem("vk_last_room");
+    const id = localStorage.getItem("vk_player_id");
+    if (last && id && !prefillCode) setRejoinCode(last);
+  }, [prefillCode]);
 
   async function createRoom() {
     if (!name.trim()) { setError("Enter your name"); return; }
@@ -44,6 +53,7 @@ function Home() {
       if (playerErr) throw playerErr;
       localStorage.setItem("vk_player_id", playerId);
       localStorage.setItem("vk_player_name", name.trim());
+      localStorage.setItem("vk_last_room", room.code);
       router.push(`/room?code=${room.code}`);
     } catch (e: unknown) {
       setError("Something went wrong. Try again.");
@@ -69,6 +79,7 @@ function Home() {
         const { data: existing } = await supabase
           .from("players").select().eq("id", existingId).eq("room_id", room.id).single();
         if (existing) {
+          localStorage.setItem("vk_last_room", room.code);
           router.push(`/room?code=${room.code}`);
           setLoading(false);
           return;
@@ -81,6 +92,7 @@ function Home() {
       if (playerErr) throw playerErr;
       localStorage.setItem("vk_player_id", playerId);
       localStorage.setItem("vk_player_name", name.trim());
+      localStorage.setItem("vk_last_room", room.code);
       router.push(`/room?code=${room.code}`);
     } catch (e: unknown) {
       setError("Something went wrong. Try again.");
@@ -103,6 +115,12 @@ function Home() {
 
         {mode === "home" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "16px" }}>
+            {rejoinCode && (
+              <button className="btn-primary" onClick={() => { sfx.tap(); router.push(`/room?code=${rejoinCode}`); }}
+                style={{ background: "linear-gradient(160deg, #2BB673, #1E9E60)" }}>
+                ↩ Rejoin room {rejoinCode}
+              </button>
+            )}
             <button className="btn-primary" onClick={() => { sfx.tap(); setMode("create"); }}>Create Room</button>
             <button className="btn-outline" onClick={() => { sfx.tap(); setMode("join"); }}>Join Room</button>
             <div style={{ textAlign: "center", marginTop: "4px" }}>
