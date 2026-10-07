@@ -83,21 +83,13 @@ function RoomPage() {
   }, []);
 
   const fetchRoom = useCallback(async () => {
-    const { data } = await supabase.from("rooms").select().eq("code", code).single();
-    if (data) {
-      setRoom(data);
-      setImposterCount(data.imposter_count);
-      setRevealMode(data.reveal_mode);
-      setTimerEnabled(data.timer_enabled);
-      setTimerSeconds(data.timer_seconds);
-      setHintsEnabled(data.hints_enabled ?? true);
-      setShowCategory(data.show_category ?? false);
-      setShowWordLength(data.show_word_length ?? false);
-      setShowFirstLetter(data.show_first_letter ?? false);
-      setImpostersKnow(data.imposters_know ?? false);
-      // Category selection is initialized once by the effect below (needs the
-      // categories list too), so it isn't overwritten on every room update.
-    }
+    const { data } = await supabase.from("rooms").select().eq("code", code).maybeSingle();
+    if (data) setRoom(data);
+    // NOTE: we deliberately do NOT sync the settings-form state here. fetchRoom
+    // runs on every realtime update and the 4s catch-up poll; writing the form
+    // state here would clobber the host's unsaved edits (e.g. the reveal-mode
+    // toggle snapping back). The form is seeded when the modal opens instead
+    // (openSettings) and written back on Save.
     return data;
   }, [code]);
 
@@ -109,7 +101,7 @@ function RoomPage() {
 
     async function init() {
       const { data: roomData } = await supabase
-        .from("rooms").select().eq("code", code).single();
+        .from("rooms").select().eq("code", code).maybeSingle();
       if (!roomData) { setError("Room not found."); setLoading(false); return; }
 
       // If this device isn't actually a player in this room (e.g. followed a
@@ -217,6 +209,26 @@ function RoomPage() {
   function toggleCategory(id: string) {
     setSelectedCategoryIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
+  // Seed the settings form from the room's current values, then open the modal.
+  // (Form state is intentionally not kept in sync with fetchRoom — see note there.)
+  function openSettings() {
+    sfx.tap();
+    if (room) {
+      setImposterCount(room.imposter_count);
+      setRevealMode(room.reveal_mode === "pass" ? "pass" : "own");
+      setTimerEnabled(room.timer_enabled);
+      setTimerSeconds(room.timer_seconds);
+      setHintsEnabled(room.hints_enabled ?? true);
+      setShowCategory(room.show_category ?? false);
+      setShowWordLength(room.show_word_length ?? false);
+      setShowFirstLetter(room.show_first_letter ?? false);
+      setImpostersKnow(room.imposters_know ?? false);
+      const stored = catIdsFromRoom(room);
+      if (stored.length) setSelectedCategoryIds(stored);
+    }
+    setShowSettings(true);
   }
 
   async function saveSettings() {
@@ -537,7 +549,7 @@ function RoomPage() {
         {/* HOST ONLY controls */}
         {isHost && (
           <>
-            <button className="btn-outline" onClick={() => { sfx.tap(); setShowSettings(true); }}>
+            <button className="btn-outline" onClick={openSettings}>
               ⚙️ Game Settings
             </button>
             <button className="btn-primary" onClick={() => { sfx.tap(); startGame(); }}

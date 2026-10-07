@@ -41,7 +41,7 @@ function Home() {
       let code = generateCode();
       let exists = true;
       while (exists) {
-        const { data } = await supabase.from("rooms").select("id").eq("code", code).single();
+        const { data } = await supabase.from("rooms").select("id").eq("code", code).maybeSingle();
         if (!data) exists = false;
         else code = generateCode();
       }
@@ -69,7 +69,7 @@ function Home() {
     setError("");
     try {
       const { data: room, error: roomErr } = await supabase
-        .from("rooms").select().eq("code", joinCode.trim().toUpperCase()).single();
+        .from("rooms").select().eq("code", joinCode.trim().toUpperCase()).maybeSingle();
       if (roomErr || !room) { setError("Room not found. Check the code."); setLoading(false); return; }
       if (room.status !== "lobby") { setError("Game already started."); setLoading(false); return; }
 
@@ -77,7 +77,7 @@ function Home() {
       const existingId = localStorage.getItem("vk_player_id");
       if (existingId) {
         const { data: existing } = await supabase
-          .from("players").select().eq("id", existingId).eq("room_id", room.id).single();
+          .from("players").select().eq("id", existingId).eq("room_id", room.id).maybeSingle();
         if (existing) {
           localStorage.setItem("vk_last_room", room.code);
           router.push(`/room?code=${room.code}`);

@@ -116,7 +116,7 @@ function GamePage() {
   const awaitingRunoffClearRef = useRef(false);
 
   const fetchRoom = useCallback(async () => {
-    const { data } = await supabase.from("rooms").select().eq("code", code).single();
+    const { data } = await supabase.from("rooms").select().eq("code", code).maybeSingle();
     if (data) setRoom(data);
     return data as Room | null;
   }, [code]);
@@ -139,7 +139,7 @@ function GamePage() {
     setMyId(id);
 
     async function init() {
-      const { data: roomData } = await supabase.from("rooms").select().eq("code", code).single();
+      const { data: roomData } = await supabase.from("rooms").select().eq("code", code).maybeSingle();
       if (!roomData) { setError("Room not found."); setLoading(false); return; }
       if (!["playing", "voting", "reveal"].includes(roomData.status)) {
         router.push(`/room?code=${code}`);
@@ -229,7 +229,7 @@ function GamePage() {
   useEffect(() => {
     if (!showCategory || !clueCategoryId) { setCategoryName(null); return; }
     supabase
-      .from("categories").select("name").eq("id", clueCategoryId).single()
+      .from("categories").select("name").eq("id", clueCategoryId).maybeSingle()
       .then(({ data }) => setCategoryName(data?.name ?? null));
   }, [showCategory, clueCategoryId]);
 
