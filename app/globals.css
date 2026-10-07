@@ -75,9 +75,12 @@ body {
   flex-direction: column;
   gap: clamp(12px, 2.4vw, 16px);
 }
-@media (min-width: 1024px) {
-  .screen { max-width: 500px; }
-}
+/* Scale the centered column up on bigger devices so it feels designed for the
+   screen rather than a phone app adrift in whitespace. `zoom` grows text,
+   padding and controls together, and reflows (unlike transform: scale). */
+@media (min-width: 768px)  { .screen { max-width: 520px; zoom: 1.08; } }   /* tablets / iPad portrait */
+@media (min-width: 1024px) { .screen { max-width: 540px; zoom: 1.15; } }   /* iPad landscape / small laptop */
+@media (min-width: 1440px) { .screen { max-width: 560px; zoom: 1.25; } }   /* MacBook / large displays */
 
 /* ===== Liquid Glass surfaces ===== */
 .card, .glass {
